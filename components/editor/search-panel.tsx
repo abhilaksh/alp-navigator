@@ -40,14 +40,32 @@ const SORT_OPTIONS = [
   { value: 'price_desc', label: 'Price: high to low' },
 ];
 
+function localDate(offsetDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
+}
+
 export function SearchPanel({ destinationName, tripId, destinationId, addedHotelIds, onAdd, onAddManual }: SearchPanelProps) {
   const [query, setQuery] = useState(`${destinationName} luxury hotels`);
+  const [checkin, setCheckin] = useState(() => localDate(1));
+  const [checkout, setCheckout] = useState(() => localDate(4));
   const [starFilters, setStarFilters] = useState<Set<number>>(new Set([5, 4]));
   const [sort, setSort] = useState('relevance');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<Set<string>>(new Set());
+
+  function handleCheckinChange(val: string) {
+    setCheckin(val);
+    if (checkout && checkout <= val) {
+      // push checkout to at least 1 day after new checkin
+      const next = new Date(val);
+      next.setDate(next.getDate() + 1);
+      setCheckout(next.toLocaleDateString('en-CA'));
+    }
+  }
 
   function toggleStar(n: number) {
     setStarFilters(prev => {
@@ -58,13 +76,15 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
   }
 
   async function doSearch() {
-    if (!query.trim()) return;
+    if (!query.trim() || !checkin || !checkout) return;
     setStatus('loading');
     setError(null);
     try {
       const sortBy = sort === 'rating' ? '8' : sort === 'price_asc' ? '3' : undefined;
       const body: Record<string, unknown> = {
         query,
+        checkin,
+        checkout,
         filters: {
           ...(starFilters.size > 0 && { hotel_class: [...starFilters].join(',') }),
           ...(sortBy && { sort_by: sortBy }),
@@ -135,12 +155,40 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
           />
           <button
             onClick={doSearch}
-            disabled={status === 'loading'}
+            disabled={status === 'loading' || !checkin || !checkout}
             className="flex items-center gap-[5px] px-3 py-[7px] bg-spruce hover:bg-spruce-light text-white border-none rounded-sm font-sans text-xs font-medium flex-shrink-0 cursor-pointer transition-colors disabled:opacity-50"
           >
             {status === 'loading' ? <Loader2 size={13} className="spin" /> : <Search size={13} />}
             Search
           </button>
+        </div>
+
+        {/* Date row */}
+        <div className="flex gap-[5px] mb-2">
+          <div className="flex-1">
+            <label className="block text-[9px] font-medium uppercase tracking-[0.07em] text-ink-mute mb-[3px]">Check-in</label>
+            <input
+              type="date"
+              value={checkin}
+              min={localDate(1)}
+              onChange={e => handleCheckinChange(e.target.value)}
+              className="w-full px-2 py-[5px] border border-glacier rounded-sm font-sans text-[11px] text-ink bg-paper outline-none transition-colors"
+              onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+              onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[9px] font-medium uppercase tracking-[0.07em] text-ink-mute mb-[3px]">Check-out</label>
+            <input
+              type="date"
+              value={checkout}
+              min={checkin ? (() => { const d = new Date(checkin); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })() : localDate(2)}
+              onChange={e => setCheckout(e.target.value)}
+              className="w-full px-2 py-[5px] border border-glacier rounded-sm font-sans text-[11px] text-ink bg-paper outline-none transition-colors"
+              onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+              onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
+            />
+          </div>
         </div>
 
         {/* Star filters */}
@@ -216,7 +264,7 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
             <Search size={32} className="text-glacier mb-3" />
             <p className="font-display text-base text-ink-soft mb-1">Search for hotels</p>
             <p className="text-xs text-ink-mute leading-relaxed">
-              Type a destination or hotel name above to search live Google Hotels rates.
+              Set your dates and search to see live Google Hotels rates.
             </p>
           </div>
         )}
