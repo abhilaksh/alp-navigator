@@ -1,15 +1,15 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { createCheckoutSession, createCustomerPortalSession } from './stripe';
+import { createRazorpaySubscription, createBillingPortalUrl } from './razorpay';
 import { withTeam } from '@/lib/auth/middleware';
 
 export const checkoutAction = withTeam(async (formData, team) => {
-  const priceId = formData.get('priceId') as string;
-  await createCheckoutSession({ team: team, priceId });
+  const planId = formData.get('planId') as string;
+  await createRazorpaySubscription({ team, planId });
 });
 
 export const customerPortalAction = withTeam(async (_, team) => {
-  const portalSession = await createCustomerPortalSession(team);
-  redirect(portalSession.url);
+  const portalUrl = await createBillingPortalUrl(team);
+  redirect(portalUrl);
 });

@@ -3,138 +3,115 @@
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { CircleIcon, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { signIn, signUp } from './actions';
 import { ActionState } from '@/lib/auth/middleware';
 
 export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect');
-  const priceId = searchParams.get('priceId');
   const inviteId = searchParams.get('inviteId');
+
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     mode === 'signin' ? signIn : signUp,
     { error: '' }
   );
 
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <CircleIcon className="h-12 w-12 text-orange-500" />
+    <div className="min-h-[100dvh] flex bg-paper">
+      {/* Left — brand panel */}
+      <div className="hidden lg:flex lg:w-[420px] bg-spruce flex-col justify-between p-12">
+        <div>
+          <span className="font-display italic text-brass text-2xl tracking-tight">alp</span>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          {mode === 'signin'
-            ? 'Sign in to your account'
-            : 'Create your account'}
-        </h2>
+        <div>
+          <p className="text-white/40 text-sm font-sans">
+            Quote Builder for Fora Pro advisors.
+          </p>
+        </div>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <form className="space-y-6" action={formAction}>
-          <input type="hidden" name="redirect" value={redirect || ''} />
-          <input type="hidden" name="priceId" value={priceId || ''} />
-          <input type="hidden" name="inviteId" value={inviteId || ''} />
-          <div>
-            <Label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Email
-            </Label>
-            <div className="mt-1">
-              <Input
+      {/* Right — form */}
+      <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-24">
+        <div className="w-full max-w-sm">
+          {/* Mobile monogram */}
+          <div className="lg:hidden mb-10">
+            <span className="font-display italic text-spruce text-2xl tracking-tight">alp</span>
+          </div>
+
+          <h1 className="font-display text-3xl text-ink mb-1">
+            {mode === 'signin' ? 'Welcome back' : 'Create account'}
+          </h1>
+          <p className="text-ink-mute text-sm mb-8">
+            {mode === 'signin'
+              ? 'Sign in to your Navigator account.'
+              : 'Start building luxury travel quotes.'}
+          </p>
+
+          <form className="space-y-5" action={formAction}>
+            <input type="hidden" name="redirect" value={redirect || ''} />
+            <input type="hidden" name="inviteId" value={inviteId || ''} />
+
+            <div>
+              <label htmlFor="email" className="block text-xs font-medium text-ink-soft uppercase tracking-wide mb-1.5">
+                Email
+              </label>
+              <input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="email"
                 defaultValue={state.email}
                 required
-                maxLength={50}
-                className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
-                placeholder="Enter your email"
+                maxLength={255}
+                className="w-full px-3.5 py-2.5 bg-white border border-glacier rounded text-sm text-ink placeholder-ink-mute focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass transition-colors"
+                placeholder="you@example.com"
               />
             </div>
-          </div>
 
-          <div>
-            <Label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Password
-            </Label>
-            <div className="mt-1">
-              <Input
+            <div>
+              <label htmlFor="password" className="block text-xs font-medium text-ink-soft uppercase tracking-wide mb-1.5">
+                Password
+              </label>
+              <input
                 id="password"
                 name="password"
                 type="password"
-                autoComplete={
-                  mode === 'signin' ? 'current-password' : 'new-password'
-                }
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                 defaultValue={state.password}
                 required
                 minLength={8}
                 maxLength={100}
-                className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
-                placeholder="Enter your password"
+                className="w-full px-3.5 py-2.5 bg-white border border-glacier rounded text-sm text-ink placeholder-ink-mute focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass transition-colors"
+                placeholder={mode === 'signin' ? '••••••••' : 'Min. 8 characters'}
               />
             </div>
-          </div>
 
-          {state?.error && (
-            <div className="text-red-500 text-sm">{state.error}</div>
-          )}
+            {state?.error && (
+              <p className="text-sm text-danger bg-danger/5 border border-danger/20 rounded px-3 py-2">
+                {state.error}
+              </p>
+            )}
 
-          <div>
-            <Button
+            <button
               type="submit"
-              className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
               disabled={pending}
+              className="w-full flex justify-center items-center gap-2 py-2.5 px-4 bg-spruce hover:bg-spruce-light text-white text-sm font-medium rounded transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {pending ? (
-                <>
-                  <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                  Loading...
-                </>
-              ) : mode === 'signin' ? (
-                'Sign in'
-              ) : (
-                'Sign up'
-              )}
-            </Button>
-          </div>
-        </form>
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {mode === 'signin' ? 'Sign in' : 'Create account'}
+            </button>
+          </form>
 
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-50 text-gray-500">
-                {mode === 'signin'
-                  ? 'New to our platform?'
-                  : 'Already have an account?'}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6">
+          <p className="mt-6 text-center text-sm text-ink-mute">
+            {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
             <Link
-              href={`${mode === 'signin' ? '/sign-up' : '/sign-in'}${
-                redirect ? `?redirect=${redirect}` : ''
-              }${priceId ? `&priceId=${priceId}` : ''}`}
-              className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-full shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+              href={mode === 'signin' ? '/sign-up' : '/sign-in'}
+              className="text-brass hover:text-brass-light font-medium transition-colors"
             >
-              {mode === 'signin'
-                ? 'Create an account'
-                : 'Sign in to existing account'}
+              {mode === 'signin' ? 'Sign up' : 'Sign in'}
             </Link>
-          </div>
+          </p>
         </div>
       </div>
     </div>

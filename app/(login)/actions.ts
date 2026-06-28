@@ -19,7 +19,6 @@ import {
 import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { createCheckoutSession } from '@/lib/payments/stripe';
 import { getUser, getUserWithTeam } from '@/lib/db/queries';
 import {
   validatedAction,
@@ -91,13 +90,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     logActivity(foundTeam?.id, foundUser.id, ActivityType.SIGN_IN)
   ]);
 
-  const redirectTo = formData.get('redirect') as string | null;
-  if (redirectTo === 'checkout') {
-    const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: foundTeam, priceId });
-  }
-
-  redirect('/dashboard');
+  redirect('/trips');
 });
 
 const signUpSchema = z.object({
@@ -131,15 +124,17 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     role: 'owner' // Default role, will be overridden if there's an invitation
   };
 
-  const [createdUser] = await db.insert(users).values(newUser).returning();
+  const [insertedUser] = await db.insert(users).values(newUser).$returningId();
 
-  if (!createdUser) {
+  if (!insertedUser) {
     return {
       error: 'Failed to create user. Please try again.',
       email,
       password
     };
   }
+
+  const [createdUser] = await db.select().from(users).where(eq(users.id, insertedUser.id)).limit(1);
 
   let teamId: number;
   let userRole: string;
@@ -184,7 +179,13 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       name: `${email}'s Team`
     };
 
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
+    [createdTeam] = await db
+      .select()
+      .from(teams)
+      .where(
+        eq(teams.id, (await db.insert(teams).values(newTeam).$returningId())[0].id)
+      )
+      .limit(1);
 
     if (!createdTeam) {
       return {
@@ -212,13 +213,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     setSession(createdUser)
   ]);
 
-  const redirectTo = formData.get('redirect') as string | null;
-  if (redirectTo === 'checkout') {
-    const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: createdTeam, priceId });
-  }
-
-  redirect('/dashboard');
+  redirect('/trips');
 });
 
 export async function signOut() {
