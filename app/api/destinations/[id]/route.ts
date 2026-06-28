@@ -22,10 +22,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { name, checkin, checkout, nights, sortOrder } = body;
+  const { name, country, checkin, checkout, nights, sortOrder } = body;
 
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
+  if (country !== undefined) updates.country = country;
   if (checkin !== undefined) updates.checkin = checkin;
   if (checkout !== undefined) updates.checkout = checkout;
   if (nights !== undefined) updates.nights = nights;

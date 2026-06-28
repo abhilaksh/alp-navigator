@@ -22,14 +22,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { name, recommendation, locationScore, lat, lng } = body;
+  const { name, recommendation, locationScore, lat, lng, sortOrder } = body;
 
-  // Update tripItems.title if name is provided
-  if (name !== undefined) {
-    await db
-      .update(tripItems)
-      .set({ title: name, updatedAt: new Date() })
-      .where(eq(tripItems.id, existing.itemId));
+  // Update tripItems fields
+  const itemUpdates: Record<string, unknown> = { updatedAt: new Date() };
+  if (name !== undefined) itemUpdates.title = name;
+  if (sortOrder !== undefined) itemUpdates.sortOrder = sortOrder;
+  if (name !== undefined || sortOrder !== undefined) {
+    await db.update(tripItems).set(itemUpdates).where(eq(tripItems.id, existing.itemId));
   }
 
   // Update hotelDetails fields

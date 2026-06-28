@@ -17,6 +17,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const id = initialTrip.id;
 
   const [label, setLabel]           = useState(initialTrip.label);
+  const [notes, setNotes]           = useState(initialTrip.notes ?? '');
   const [adults]                    = useState(initialTrip.adults);
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
@@ -27,6 +28,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const activeDest  = destinations.find(d => d.id === activeDestId) ?? null;
   const hotelItems  = activeDest?.items ?? [];
   const clientName  = initialTrip.client?.name ?? null;
+  const clientEmail = (initialTrip.client as { email?: string | null } | null)?.email ?? null;
+  const clientWa    = (initialTrip.client as { whatsapp?: string | null } | null)?.whatsapp ?? null;
 
   // ─── Auto-save (debounced 1 s) ──────────────────────────────────────────────
   const scheduleSave = useCallback((patch: object) => {
@@ -61,6 +64,11 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       });
       setSaveStatus(res.ok ? 'saved' : 'error');
     } catch { setSaveStatus('error'); }
+  }
+
+  function handleNotesChange(v: string) {
+    setNotes(v);
+    scheduleSave({ notes: v });
   }
 
   // ─── WhatsApp copy ──────────────────────────────────────────────────────────
@@ -136,6 +144,44 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }).catch(() => {});
   }
 
+  function handleDestCheckinChange(destId: number, checkin: string) {
+    setDests(prev => updateDest(prev, destId, d => {
+      const checkout = d.checkout;
+      if (checkout && checkout <= checkin) {
+        const next = new Date(checkin);
+        next.setDate(next.getDate() + 1);
+        return { ...d, checkin, checkout: next.toLocaleDateString('en-CA') };
+      }
+      return { ...d, checkin };
+    }));
+  }
+
+  function handleDestCheckoutChange(destId: number, checkout: string) {
+    setDests(prev => updateDest(prev, destId, d => ({ ...d, checkout })));
+  }
+
+  async function handleDestDateBlur(destId: number) {
+    const dest = destinations.find(d => d.id === destId);
+    if (!dest) return;
+    await fetch(`/api/destinations/${destId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkin: dest.checkin, checkout: dest.checkout }),
+    }).catch(() => {});
+  }
+
+  function handleDestCountryChange(destId: number, country: string) {
+    setDests(prev => updateDest(prev, destId, d => ({ ...d, country })));
+  }
+
+  async function handleDestCountryBlur(destId: number, country: string) {
+    await fetch(`/api/destinations/${destId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ country }),
+    }).catch(() => {});
+  }
+
   // ─── Hotel mutations ─────────────────────────────────────────────────────────
   async function handleAddHotelFromSearch(hotel: SearchResult) {
     if (!activeDestId) return;
@@ -197,6 +243,26 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     setDests(prev => prev.map(d => ({ ...d, items: d.items.filter(i => i.id !== itemId) })));
   }
 
+  function handleMoveHotel(destId: number, fromIndex: number, toIndex: number) {
+    setDests(prev => prev.map(d => {
+      if (d.id !== destId) return d;
+      const items = [...d.items];
+      const [moved] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, moved);
+      const reordered = items.map((item, idx) => ({ ...item, sortOrder: idx }));
+      reordered.forEach(item => {
+        if (item.hotelDetails) {
+          fetch(`/api/hotels/${item.hotelDetails.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sortOrder: item.sortOrder }),
+          }).catch(() => {});
+        }
+      });
+      return { ...d, items: reordered };
+    }));
+  }
+
   function handleHotelTitleChange(itemId: number, title: string) {
     setDests(prev => updateItem(prev, itemId, i => ({ ...i, title })));
     scheduleSave({ hotels: true });
@@ -207,7 +273,14 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       ...i,
       hotelDetails: i.hotelDetails ? { ...i.hotelDetails, recommendation: value } : null,
     })));
-    scheduleSave({ hotels: true });
+  }
+
+  function handleRecommendationBlur(hotelDetailId: number, value: string) {
+    fetch(`/api/hotels/${hotelDetailId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recommendation: value }),
+    }).catch(() => {});
   }
 
   function handleLocationScoreChange(itemId: number, value: string) {
@@ -216,7 +289,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       ...i,
       hotelDetails: i.hotelDetails ? { ...i.hotelDetails, locationScore: score } : null,
     })));
-    scheduleSave({ hotels: true });
+  }
+
+  function handleLocationScoreBlur(hotelDetailId: number, value: string) {
+    const score = parseFloat(value) || null;
+    fetch(`/api/hotels/${hotelDetailId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locationScore: score }),
+    }).catch(() => {});
   }
 
   // ─── Rate mutations ──────────────────────────────────────────────────────────
@@ -405,24 +486,40 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   onBlurCapture={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
                 />
 
-                {/* Date row */}
+                {/* Country + Date row */}
                 <div className="flex items-center gap-2.5 mt-[5px]">
                   <input
                     type="text"
-                    defaultValue={activeDest.checkin ?? ''}
+                    value={activeDest.country ?? ''}
+                    onChange={e => handleDestCountryChange(activeDest.id, e.target.value)}
+                    onBlur={e => handleDestCountryBlur(activeDest.id, e.target.value)}
+                    placeholder="Country"
+                    className="font-sans text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors w-[90px]"
+                    style={{ borderBottom: '1px solid transparent' }}
+                    onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
+                    onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                  />
+                  <span className="text-ink-mute text-[11px] opacity-40">·</span>
+                  <input
+                    type="text"
+                    value={activeDest.checkin ?? ''}
+                    onChange={e => handleDestCheckinChange(activeDest.id, e.target.value)}
+                    onBlur={() => handleDestDateBlur(activeDest.id)}
                     placeholder="Check-in"
                     className="font-mono text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors"
-                    style={{ borderBottom: '1px solid transparent' }}
+                    style={{ borderBottom: '1px solid transparent', width: 72 }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
                     onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
                   />
                   <span className="text-ink-mute text-[11px]">→</span>
                   <input
                     type="text"
-                    defaultValue={activeDest.checkout ?? ''}
+                    value={activeDest.checkout ?? ''}
+                    onChange={e => handleDestCheckoutChange(activeDest.id, e.target.value)}
+                    onBlur={() => handleDestDateBlur(activeDest.id)}
                     placeholder="Check-out"
                     className="font-mono text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors"
-                    style={{ borderBottom: '1px solid transparent' }}
+                    style={{ borderBottom: '1px solid transparent', width: 72 }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
                     onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
                   />
@@ -431,6 +528,20 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   )}
                 </div>
               </div>
+
+              {/* Trip notes */}
+              {(notes || true) && (
+                <textarea
+                  value={notes}
+                  onChange={e => handleNotesChange(e.target.value)}
+                  placeholder="Internal notes…"
+                  rows={notes ? undefined : 1}
+                  className="w-full font-sans text-[12px] text-ink-soft bg-transparent border-none outline-none resize-none py-0 mb-[18px] leading-relaxed placeholder:text-ink-mute"
+                  style={{ minHeight: 20 }}
+                  onFocus={e => (e.currentTarget.rows = 3)}
+                  onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 1; }}
+                />
+              )}
 
               {/* Hotels count row */}
               <div className="flex items-center justify-between mb-3">
@@ -455,6 +566,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                     item={item}
                     index={i}
                     onRemove={handleRemoveHotel}
+                    onMoveUp={i > 0 ? () => handleMoveHotel(activeDest.id, i, i - 1) : undefined}
+                    onMoveDown={i < hotelItems.length - 1 ? () => handleMoveHotel(activeDest.id, i, i + 1) : undefined}
                     onAddRate={handleAddRate}
                     onRemoveRate={handleRemoveRate}
                     onParseRate={handleParseRate}
@@ -462,7 +575,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                     onSelectProposal={handleSelectProposal}
                     onTitleChange={handleHotelTitleChange}
                     onRecommendationChange={handleRecommendationChange}
+                    onRecommendationBlur={handleRecommendationBlur}
                     onLocationScoreChange={handleLocationScoreChange}
+                    onLocationScoreBlur={handleLocationScoreBlur}
                   />
                 ))
               )}
@@ -554,10 +669,37 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         </button>
         {clientName && (
           <button
+            onClick={() => {
+              const previewUrl = initialTrip.previewKey
+                ? `${window.location.origin}/preview/${initialTrip.previewKey}`
+                : '';
+              const firstName = clientName.split(' ')[0];
+              const subject = encodeURIComponent(`Your travel quote: ${label}`);
+              const body = encodeURIComponent(
+                `Hi ${firstName},\n\nYour travel quote is ready${previewUrl ? `:\n${previewUrl}` : '.'}\n\nLet me know if you'd like to adjust anything.\n\nBest,\nAbhilaksh`
+              );
+              const href = clientEmail
+                ? `mailto:${clientEmail}?subject=${subject}&body=${body}`
+                : `mailto:?subject=${subject}&body=${body}`;
+              window.location.href = href;
+            }}
             className="text-[11px] font-sans text-ink-soft border border-glacier px-2.5 py-1 rounded-sm hover:text-spruce hover:border-spruce transition-colors cursor-pointer whitespace-nowrap flex-shrink-0"
             style={{ background: 'none' }}
           >
             Email to {clientName.split(' ')[0]}
+          </button>
+        )}
+        {clientWa && initialTrip.previewKey && (
+          <button
+            onClick={() => {
+              const previewUrl = `${window.location.origin}/preview/${initialTrip.previewKey}`;
+              const msg = encodeURIComponent(`Hi ${clientName?.split(' ')[0]}, your travel quote is ready: ${previewUrl}`);
+              window.open(`https://wa.me/${clientWa.replace(/\D/g, '')}?text=${msg}`, '_blank');
+            }}
+            className="text-[11px] font-sans text-ink-soft border border-glacier px-2.5 py-1 rounded-sm hover:text-spruce hover:border-spruce transition-colors cursor-pointer whitespace-nowrap flex-shrink-0"
+            style={{ background: 'none' }}
+          >
+            WA {clientName?.split(' ')[0]}
           </button>
         )}
       </footer>

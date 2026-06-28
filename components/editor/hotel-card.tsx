@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { GripVertical, ChevronUp, ChevronDown, X, MapPin, Sparkles } from 'lucide-react';
+import { ChevronUp, ChevronDown, X, MapPin, Sparkles } from 'lucide-react';
 import { RateCard, type RateState } from './rate-card';
 import type { ParsedRate } from '@/lib/db/schema';
 
@@ -36,6 +36,8 @@ interface HotelCardProps {
   item: HotelItemState;
   index: number;
   onRemove: (itemId: number) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   onAddRate: (hotelDetailId: number) => Promise<void>;
   onRemoveRate: (rateId: number) => void;
   onParseRate: (rateId: number, rawText: string) => Promise<void>;
@@ -43,7 +45,9 @@ interface HotelCardProps {
   onSelectProposal: (rateId: number, proposal: ParsedRate) => void;
   onTitleChange: (itemId: number, title: string) => void;
   onRecommendationChange: (itemId: number, value: string) => void;
+  onRecommendationBlur: (hotelDetailId: number, value: string) => void;
   onLocationScoreChange: (itemId: number, value: string) => void;
+  onLocationScoreBlur: (hotelDetailId: number, value: string) => void;
 }
 
 function renderStars(n: number | null) {
@@ -53,8 +57,8 @@ function renderStars(n: number | null) {
 
 export function HotelCard({
   item, index,
-  onRemove, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
-  onTitleChange, onRecommendationChange, onLocationScoreChange,
+  onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
+  onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
 }: HotelCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingRemove, setPendingRemove] = useState(false);
@@ -109,12 +113,21 @@ export function HotelCard({
       <div className="relative z-[1]">
         {/* ── Card header ──────────────────────────────────────────────── */}
         <div className="flex items-center gap-[7px] px-[11px] py-[11px] pb-[9px]">
-          {/* Drag handle */}
-          <button
-            className="text-ink-mute cursor-grab flex-shrink-0 leading-none opacity-0 group-hover/hotel:opacity-55 hover:!opacity-100 active:cursor-grabbing transition-opacity"
-          >
-            <GripVertical size={12} />
-          </button>
+          {/* Reorder buttons */}
+          <div className="flex flex-col gap-[1px] flex-shrink-0 opacity-0 group-hover/hotel:opacity-60 hover:!opacity-100 transition-opacity">
+            <button
+              onClick={onMoveUp}
+              disabled={!onMoveUp}
+              className="text-ink-mute cursor-pointer leading-none disabled:opacity-20 disabled:cursor-default transition-colors hover:text-brass"
+              style={{ fontSize: 10, lineHeight: 1 }}
+            >▲</button>
+            <button
+              onClick={onMoveDown}
+              disabled={!onMoveDown}
+              className="text-ink-mute cursor-pointer leading-none disabled:opacity-20 disabled:cursor-default transition-colors hover:text-brass"
+              style={{ fontSize: 10, lineHeight: 1 }}
+            >▼</button>
+          </div>
 
           {/* Badge */}
           <span
@@ -209,11 +222,12 @@ export function HotelCard({
                     type="text"
                     value={detail?.locationScore?.toString() ?? ''}
                     onChange={e => onLocationScoreChange(item.id, e.target.value)}
+                    onBlur={e => detail && onLocationScoreBlur(detail.id, e.target.value)}
                     placeholder="—"
                     className="font-mono text-[14px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none w-[46px] p-0 transition-colors"
                     style={{ borderBottom: '1px solid transparent' }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
-                    onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                    onBlurCapture={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
                   />
                   <span className="font-mono text-[9px] text-ink-mute">/ 10</span>
                 </div>
@@ -226,12 +240,13 @@ export function HotelCard({
                   <textarea
                     value={detail?.recommendation ?? ''}
                     onChange={e => onRecommendationChange(item.id, e.target.value)}
+                    onBlur={e => detail && onRecommendationBlur(detail.id, e.target.value)}
                     rows={2}
                     placeholder="Add your note about this property…"
                     className="w-full bg-transparent border-none border-l-2 border-l-transparent outline-none font-sans text-xs text-ink-soft leading-[1.65] resize-none py-0 pb-6 pl-[7px] min-h-[38px] transition-colors placeholder:text-ink-mute placeholder:italic"
                     style={{ borderLeft: '2px solid transparent', transition: 'border-color 0.14s, color 0.14s' }}
                     onFocus={e => { e.currentTarget.style.borderLeftColor = '#A98B52'; e.currentTarget.style.color = '#161A17'; }}
-                    onBlur={e => { e.currentTarget.style.borderLeftColor = 'transparent'; e.currentTarget.style.color = ''; }}
+                    onBlurCapture={e => { e.currentTarget.style.borderLeftColor = 'transparent'; e.currentTarget.style.color = ''; }}
                   />
                   <button
                     className="absolute bottom-[6px] right-[6px] inline-flex items-center gap-1 px-2 py-[3px] rounded-[3px] text-brass text-[11px] font-sans cursor-pointer transition-colors"

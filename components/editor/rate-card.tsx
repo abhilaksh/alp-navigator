@@ -14,6 +14,7 @@ export interface RateState {
   parsedData: string | null;
   proposals: string | null;
   errorMessage: string | null;
+  history: string | null;
   sortOrder: number;
 }
 
@@ -47,6 +48,9 @@ export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSel
 
   const parsed: ParsedRate | null = rate.parsedData ? (() => { try { return JSON.parse(rate.parsedData); } catch { return null; } })() : null;
   const proposals: ParsedRate[] = rate.proposals ? (() => { try { return JSON.parse(rate.proposals); } catch { return []; } })() : [];
+  const history: { parsed: ParsedRate; rawText?: string; timestamp?: string }[] = rate.history
+    ? (() => { try { return JSON.parse(rate.history); } catch { return []; } })()
+    : [];
   const effectiveStatus = parsing ? 'parsing' : rate.status;
 
   async function handleParse() {
@@ -182,6 +186,34 @@ export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSel
 
           {/* Done state */}
           {effectiveStatus === 'done' && parsed && <DoneState parsed={parsed} />}
+
+          {/* Parse history */}
+          {effectiveStatus === 'done' && history.length > 0 && (
+            <details className="px-2.5 pb-2.5">
+              <summary className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute cursor-pointer hover:text-brass transition-colors select-none">
+                History ({history.length} prev{history.length !== 1 ? 'ious' : ''} parse{history.length !== 1 ? 's' : ''})
+              </summary>
+              <div className="mt-1.5 flex flex-col gap-1.5">
+                {history.slice().reverse().map((h, i) => (
+                  <div key={i} className="border border-glacier rounded-sm px-2.5 py-2" style={{ background: 'rgba(22,26,23,0.02)' }}>
+                    <div className="flex items-baseline gap-2 mb-1">
+                      {h.parsed.room_type && (
+                        <span className="font-sans text-[11px] text-ink-soft">{h.parsed.room_type}</span>
+                      )}
+                      {h.parsed.total_inr && (
+                        <span className="font-mono text-[11px] text-ink-mute ml-auto">{inr(h.parsed.total_inr)}</span>
+                      )}
+                    </div>
+                    {h.timestamp && (
+                      <div className="font-mono text-[9px] text-ink-mute">
+                        {new Date(h.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
 
           {/* Proposals state */}
           {effectiveStatus === 'proposals' && proposals.length > 0 && (

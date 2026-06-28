@@ -7,7 +7,7 @@ export type RateRow = {
   id: number; source: string; sourceLabel: string | null;
   rawText: string | null; status: string; isConfirmed: number;
   parsedData: string | null; proposals: string | null;
-  errorMessage: string | null; sortOrder: number;
+  errorMessage: string | null; history: string | null; sortOrder: number;
 };
 
 export type DestinationState = {

@@ -22,7 +22,7 @@ interface SearchPanelProps {
   destinationName: string;
   tripId: number;
   destinationId: number | null;
-  addedHotelIds: Set<string>; // serpapi IDs already added
+  addedHotelIds: Set<string>;
   onAdd: (hotel: SearchResult) => Promise<void>;
   onAddManual: () => Promise<void>;
 }
@@ -43,10 +43,11 @@ const SORT_OPTIONS = [
 function localDate(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  return d.toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
+  return d.toLocaleDateString('en-CA');
 }
 
 export function SearchPanel({ destinationName, tripId, destinationId, addedHotelIds, onAdd, onAddManual }: SearchPanelProps) {
+  const [searchMode, setSearchMode] = useState<'google' | 'wp'>('google');
   const [query, setQuery] = useState(`${destinationName} luxury hotels`);
   const [checkin, setCheckin] = useState(() => localDate(1));
   const [checkout, setCheckout] = useState(() => localDate(4));
@@ -60,7 +61,6 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
   function handleCheckinChange(val: string) {
     setCheckin(val);
     if (checkout && checkout <= val) {
-      // push checkout to at least 1 day after new checkin
       const next = new Date(val);
       next.setDate(next.getDate() + 1);
       setCheckout(next.toLocaleDateString('en-CA'));
@@ -76,42 +76,54 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
   }
 
   async function doSearch() {
-    if (!query.trim() || !checkin || !checkout) return;
+    if (!query.trim()) return;
+    if (searchMode === 'google' && (!checkin || !checkout)) return;
     setStatus('loading');
     setError(null);
     try {
-      const sortBy = sort === 'rating' ? '8' : sort === 'price_asc' ? '3' : undefined;
-      const body: Record<string, unknown> = {
-        query,
-        checkin,
-        checkout,
-        filters: {
-          ...(starFilters.size > 0 && { hotel_class: [...starFilters].join(',') }),
-          ...(sortBy && { sort_by: sortBy }),
-        },
-      };
-      const res = await fetch('/api/search/hotels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      const mapped: SearchResult[] = (data.results ?? []).map((r: Record<string, unknown>) => ({
-        id: String(r.serpIdx ?? r.name ?? Math.random()),
-        name: String(r.name ?? ''),
-        stars: (r.stars as number) ?? 0,
-        rating: (r.rating as number) ?? 0,
-        reviews: (r.reviews as number) ?? 0,
-        googleRateInr: (r.rate_inr as number) ?? null,
-        thumbnail: (r.thumbnail as string) ?? null,
-        foraId: null,
-        isForaPreferred: false,
-        isVirtuoso: false,
-        lat: (r.gps_coordinates as { latitude: number; longitude: number } | null)?.latitude,
-        lng: (r.gps_coordinates as { latitude: number; longitude: number } | null)?.longitude,
-      }));
-      setResults(mapped);
+      if (searchMode === 'google') {
+        const sortBy = sort === 'rating' ? '8' : sort === 'price_asc' ? '3' : undefined;
+        const body: Record<string, unknown> = {
+          query,
+          checkin,
+          checkout,
+          filters: {
+            ...(starFilters.size > 0 && { hotel_class: [...starFilters].join(',') }),
+            ...(sortBy && { sort_by: sortBy }),
+          },
+        };
+        const res = await fetch('/api/search/hotels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const mapped: SearchResult[] = (data.results ?? []).map((r: Record<string, unknown>) => ({
+          id: String(r.serpIdx ?? r.name ?? Math.random()),
+          name: String(r.name ?? ''),
+          stars: (r.stars as number) ?? 0,
+          rating: (r.rating as number) ?? 0,
+          reviews: (r.reviews as number) ?? 0,
+          googleRateInr: (r.rate_inr as number) ?? null,
+          thumbnail: (r.thumbnail as string) ?? null,
+          foraId: null,
+          isForaPreferred: false,
+          isVirtuoso: false,
+          lat: (r.gps_coordinates as { latitude: number; longitude: number } | null)?.latitude,
+          lng: (r.gps_coordinates as { latitude: number; longitude: number } | null)?.longitude,
+        }));
+        setResults(mapped);
+      } else {
+        const res = await fetch('/api/search/wp-hotels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        setResults(data.results ?? []);
+      }
       setStatus('done');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed');
@@ -140,6 +152,24 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
           Find hotels for <span className="text-spruce">{destinationName || 'this destination'}</span>
         </div>
 
+        {/* Mode tabs */}
+        <div className="flex gap-[2px] mb-2.5">
+          {(['google', 'wp'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => { setSearchMode(mode); setResults([]); setStatus('idle'); }}
+              className="text-[10px] font-sans px-2.5 py-[4px] rounded-sm transition-colors cursor-pointer"
+              style={{
+                background: searchMode === mode ? '#1E3A2F' : 'transparent',
+                color: searchMode === mode ? '#F6F4EE' : '#4A514B',
+                border: `1px solid ${searchMode === mode ? '#1E3A2F' : '#C9D2CC'}`,
+              }}
+            >
+              {mode === 'google' ? 'Google Hotels' : 'Our portfolio'}
+            </button>
+          ))}
+        </div>
+
         {/* Search bar */}
         <div className="flex gap-[5px] mb-2">
           <input
@@ -147,15 +177,14 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && doSearch()}
-            placeholder="Search Google Hotels…"
+            placeholder={searchMode === 'google' ? 'Search Google Hotels…' : 'Search our hotel portfolio…'}
             className="flex-1 px-2.5 py-[7px] border border-glacier rounded-sm font-sans text-xs text-ink bg-paper outline-none transition-colors"
-            style={{}}
             onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
             onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
           />
           <button
             onClick={doSearch}
-            disabled={status === 'loading' || !checkin || !checkout}
+            disabled={status === 'loading' || (searchMode === 'google' && (!checkin || !checkout))}
             className="flex items-center gap-[5px] px-3 py-[7px] bg-spruce hover:bg-spruce-light text-white border-none rounded-sm font-sans text-xs font-medium flex-shrink-0 cursor-pointer transition-colors disabled:opacity-50"
           >
             {status === 'loading' ? <Loader2 size={13} className="spin" /> : <Search size={13} />}
@@ -163,57 +192,61 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
           </button>
         </div>
 
-        {/* Date row */}
-        <div className="flex gap-[5px] mb-2">
-          <div className="flex-1">
-            <label className="block text-[9px] font-medium uppercase tracking-[0.07em] text-ink-mute mb-[3px]">Check-in</label>
-            <input
-              type="date"
-              value={checkin}
-              min={localDate(1)}
-              onChange={e => handleCheckinChange(e.target.value)}
-              className="w-full px-2 py-[5px] border border-glacier rounded-sm font-sans text-[11px] text-ink bg-paper outline-none transition-colors"
-              onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
-              onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
-            />
+        {/* Date row (Google only) */}
+        {searchMode === 'google' && (
+          <div className="flex gap-[5px] mb-2">
+            <div className="flex-1">
+              <label className="block text-[9px] font-medium uppercase tracking-[0.07em] text-ink-mute mb-[3px]">Check-in</label>
+              <input
+                type="date"
+                value={checkin}
+                min={localDate(1)}
+                onChange={e => handleCheckinChange(e.target.value)}
+                className="w-full px-2 py-[5px] border border-glacier rounded-sm font-sans text-[11px] text-ink bg-paper outline-none transition-colors"
+                onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-[9px] font-medium uppercase tracking-[0.07em] text-ink-mute mb-[3px]">Check-out</label>
+              <input
+                type="date"
+                value={checkout}
+                min={checkin ? (() => { const d = new Date(checkin); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })() : localDate(2)}
+                onChange={e => setCheckout(e.target.value)}
+                className="w-full px-2 py-[5px] border border-glacier rounded-sm font-sans text-[11px] text-ink bg-paper outline-none transition-colors"
+                onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
+              />
+            </div>
           </div>
-          <div className="flex-1">
-            <label className="block text-[9px] font-medium uppercase tracking-[0.07em] text-ink-mute mb-[3px]">Check-out</label>
-            <input
-              type="date"
-              value={checkout}
-              min={checkin ? (() => { const d = new Date(checkin); d.setDate(d.getDate() + 1); return d.toLocaleDateString('en-CA'); })() : localDate(2)}
-              onChange={e => setCheckout(e.target.value)}
-              className="w-full px-2 py-[5px] border border-glacier rounded-sm font-sans text-[11px] text-ink bg-paper outline-none transition-colors"
-              onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
-              onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
-            />
-          </div>
-        </div>
+        )}
 
-        {/* Star filters */}
-        <div className="flex gap-1 flex-wrap">
-          {STAR_FILTERS.map(f => (
-            <button
-              key={f.value}
-              onClick={() => toggleStar(f.value)}
-              className={`text-[10px] px-2 py-[3px] rounded-full border font-sans cursor-pointer transition-all ${
-                starFilters.has(f.value)
-                  ? 'bg-spruce border-spruce text-white'
-                  : 'border-glacier text-ink-soft hover:border-spruce hover:text-spruce'
-              }`}
+        {/* Star filters (Google only) */}
+        {searchMode === 'google' && (
+          <div className="flex gap-1 flex-wrap">
+            {STAR_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => toggleStar(f.value)}
+                className={`text-[10px] px-2 py-[3px] rounded-full border font-sans cursor-pointer transition-all ${
+                  starFilters.has(f.value)
+                    ? 'bg-spruce border-spruce text-white'
+                    : 'border-glacier text-ink-soft hover:border-spruce hover:text-spruce'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+            <select
+              value={sort}
+              onChange={e => setSort(e.target.value)}
+              className="ml-auto text-[10px] text-ink-soft bg-paper border border-glacier rounded-sm px-1.5 py-[3px] font-sans outline-none cursor-pointer"
             >
-              {f.label}
-            </button>
-          ))}
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value)}
-            className="ml-auto text-[10px] text-ink-soft bg-paper border border-glacier rounded-sm px-1.5 py-[3px] font-sans outline-none cursor-pointer"
-          >
-            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
+              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Alt search divider */}
@@ -235,15 +268,13 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
 
       {/* Results area */}
       <div className="flex-1 overflow-y-auto px-3 pb-5">
-        {/* Loading */}
         {status === 'loading' && (
           <div className="flex flex-col items-center gap-3 py-10 text-ink-mute text-[13px] font-sans text-center">
             <Loader2 size={24} className="spin text-brass" />
-            <span>Searching Google Hotels…</span>
+            <span>{searchMode === 'google' ? 'Searching Google Hotels…' : 'Searching our portfolio…'}</span>
           </div>
         )}
 
-        {/* Error */}
         {status === 'error' && error && (
           <div className="mx-1 mt-3 p-4 rounded" style={{ background: 'rgba(139,47,47,0.05)', border: '1px solid rgba(139,47,47,0.2)' }}>
             <div className="flex items-center gap-2 text-danger text-[13px] font-sans mb-2.5">
@@ -258,18 +289,20 @@ export function SearchPanel({ destinationName, tripId, destinationId, addedHotel
           </div>
         )}
 
-        {/* Idle — prompt */}
         {status === 'idle' && (
           <div className="flex flex-col items-center justify-center py-14 text-center px-4">
             <Search size={32} className="text-glacier mb-3" />
-            <p className="font-display text-base text-ink-soft mb-1">Search for hotels</p>
+            <p className="font-display text-base text-ink-soft mb-1">
+              {searchMode === 'google' ? 'Search for hotels' : 'Search our portfolio'}
+            </p>
             <p className="text-xs text-ink-mute leading-relaxed">
-              Set your dates and search to see live Google Hotels rates.
+              {searchMode === 'google'
+                ? 'Set your dates and search to see live Google Hotels rates.'
+                : 'Search hotels from our curated portfolio on alptravel.co.'}
             </p>
           </div>
         )}
 
-        {/* Results */}
         {status === 'done' && results.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center px-4">
             <p className="font-display text-base text-ink-soft mb-1">No results</p>
@@ -327,7 +360,6 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
         e.currentTarget.style.boxShadow = '';
       }}
     >
-      {/* Thumbnail */}
       {hotel.thumbnail ? (
         <img
           src={hotel.thumbnail}
@@ -338,7 +370,6 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
         <div className="w-[68px] h-[54px] rounded-sm flex-shrink-0 bg-glacier" />
       )}
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="font-display text-[13px] text-ink whitespace-nowrap overflow-hidden text-ellipsis mb-0.5">
           {hotel.name}
@@ -347,9 +378,11 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
           <div className="text-[9px] text-brass tracking-[-0.5px] mb-0.5">{stars}</div>
         )}
         <div className="flex items-center gap-[5px]">
-          <span className="font-mono text-[10px] text-ink-soft px-[5px] py-px rounded-[2px] bg-paper-deep">
-            {hotel.rating.toFixed(1)}
-          </span>
+          {hotel.rating > 0 && (
+            <span className="font-mono text-[10px] text-ink-soft px-[5px] py-px rounded-[2px] bg-paper-deep">
+              {hotel.rating.toFixed(1)}
+            </span>
+          )}
           {hotel.googleRateInr && (
             <span className="font-mono text-[11px] text-ink-soft ml-auto">
               ₹{Math.round(hotel.googleRateInr / 1000)}k/n
@@ -370,7 +403,6 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
         </div>
       </div>
 
-      {/* Add / Added */}
       <div className="self-center flex-shrink-0">
         {isAdded ? (
           <div
