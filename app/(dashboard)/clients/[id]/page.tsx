@@ -7,8 +7,7 @@ import { useParams } from 'next/navigation';
 import {
   ArrowLeft, Phone, Mail, MessageCircle, Plus, Map,
   Utensils, Accessibility, BedDouble, Plane, MapPin, ThumbsDown, Wallet, Users,
-} from 'lucide-react';
-import type { Client, Trip } from '@/lib/db/schema';
+} from 'lucide-react';import type { Client, Trip } from '@/lib/db/schema';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -165,6 +164,44 @@ export default function ClientDetailPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-5 py-7 space-y-7">
+
+        {/* ── LTV Stats ─────────────────────────────────────────────── */}
+        {data.trips && data.trips.length > 0 && (() => {
+          const tripList = data.trips as Trip[];
+          const totalQuoted = tripList.reduce((s, t) => s + (t.totalFromInr ?? 0), 0);
+          const bookedCount = tripList.filter(t => t.status === 'booked').length;
+          const sentCount = tripList.filter(t => t.status === 'sent').length;
+          const acceptedCount = tripList.filter(t => t.status === 'accepted').length;
+
+          function inr(n: number) {
+            if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)}Cr`;
+            if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+            if (n >= 1000) return `₹${(n / 1000).toFixed(0)}k`;
+            return `₹${n.toLocaleString('en-IN')}`;
+          }
+
+          return (
+            <div
+              className="grid grid-cols-4 gap-2 mb-1"
+            >
+              {[
+                { label: 'Total trips', value: String(tripList.length) },
+                { label: 'Total quoted', value: totalQuoted > 0 ? inr(totalQuoted) : '—' },
+                { label: 'Booked', value: String(bookedCount) },
+                { label: 'Awaiting', value: String(sentCount + acceptedCount) },
+              ].map(stat => (
+                <div
+                  key={stat.label}
+                  className="rounded-[5px] px-3.5 py-3 bg-white"
+                  style={{ border: '1px solid rgba(22,26,23,0.08)' }}
+                >
+                  <div className="font-mono text-[18px] text-ink leading-none mb-[3px]">{stat.value}</div>
+                  <div className="font-sans text-[9px] uppercase tracking-[0.1em] text-ink-mute">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ── Contact ─────────────────────────────────────────────── */}
         <ProfileSection title="Contact">
