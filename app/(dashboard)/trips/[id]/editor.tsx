@@ -11,6 +11,7 @@ import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types
 import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, isHotelItem } from './editor-utils';
 import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
 import { BookingsPanel } from '@/components/editor/bookings-panel';
+import { ChecklistPanel } from '@/components/editor/checklist-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -154,7 +155,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
-  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings'>('editor');
+  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist'>('editor');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -821,6 +822,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
           )}
         </button>
+
+        {/* Checklist tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'checklist' ? 'editor' : 'checklist')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'checklist' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'checklist' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Checklist
+          {activeView === 'checklist' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
       </nav>
 
       {/* Main editor body */}
@@ -837,6 +854,16 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             destinations={destinations}
             onStatusChange={handleBookingStatusChange}
             onBookingRefChange={handleBookingRefChange}
+          />
+        )}
+
+        {/* Checklist view */}
+        {activeView === 'checklist' && (
+          <ChecklistPanel
+            tripLabel={label}
+            clientName={clientName}
+            adults={adults}
+            destinations={destinations}
           />
         )}
 
