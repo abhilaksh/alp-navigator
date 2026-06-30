@@ -7,7 +7,7 @@ import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
 import { LineItemCard, type LineItemState } from '@/components/editor/line-item-card';
 import { SearchPanel, type SearchResult } from '@/components/editor/search-panel';
 import type { ParsedRate } from '@/lib/db/schema';
-import type { TripFull, DestinationState, RateRow } from './types';
+import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
 import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, isHotelItem } from './editor-utils';
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         const dest = await res.json();
         const newDest: DestinationState = {
           id: dest.id, name, country: null, checkin: null, checkout: null, nights: null,
-          sortOrder: destinations.length, items: [],
+          sortOrder: destinations.length, items: [], visaInfo: null,
         };
         setDests(prev => [...prev, newDest]);
         setActiveDest(dest.id);
@@ -213,6 +213,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ country }),
     }).catch(() => {});
+    if (country.trim()) {
+      try {
+        const res = await fetch(`/api/visa-lookup?country=${encodeURIComponent(country.trim())}`);
+        if (res.ok) {
+          const visaInfo: VisaInfoState | null = await res.json();
+          setDests(prev => updateDest(prev, destId, d => ({ ...d, visaInfo })));
+        }
+      } catch { /* no-op */ }
+    }
   }
 
   // ─── Hotel mutations ─────────────────────────────────────────────────────────
@@ -679,6 +688,19 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   />
                   {nightsCalc != null && (
                     <span className="font-mono text-[11px] text-ink-mute">· {nightsCalc} nights</span>
+                  )}
+                  {activeDest.visaInfo && (
+                    <span
+                      title={`${activeDest.visaInfo.category}${activeDest.visaInfo.processingTime ? ` · ${activeDest.visaInfo.processingTime}` : ''}${activeDest.visaInfo.fee ? ` · ${activeDest.visaInfo.fee}` : ''}`}
+                      className="ml-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm tracking-[0.04em]"
+                      style={
+                        activeDest.visaInfo.required
+                          ? { background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }
+                          : { background: 'rgba(30,58,47,0.08)', color: '#1E3A2F', border: '1px solid rgba(30,58,47,0.18)' }
+                      }
+                    >
+                      {activeDest.visaInfo.required ? `Visa req.` : 'Visa free'}
+                    </span>
                   )}
                 </div>
               </div>

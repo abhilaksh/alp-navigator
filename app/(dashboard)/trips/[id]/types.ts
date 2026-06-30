@@ -11,11 +11,21 @@ export type RateRow = {
   errorMessage: string | null; history: string | null; sortOrder: number;
 };
 
+export type VisaInfoState = {
+  required: boolean;
+  category: string;
+  difficulty: string;
+  processingTime: string;
+  fee: string;
+  stayDuration: string;
+};
+
 export type DestinationState = {
   id: number; name: string; country: string | null;
   checkin: string | null; checkout: string | null;
   nights: number | null; sortOrder: number;
   items: (HotelItemState | LineItemState)[];
+  visaInfo: VisaInfoState | null;
 };
 
 export type { LineItemState };

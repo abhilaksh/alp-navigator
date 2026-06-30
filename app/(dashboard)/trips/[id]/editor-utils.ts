@@ -1,6 +1,6 @@
 import type { HotelItemState } from '@/components/editor/hotel-card';
 import type { LineItemState } from '@/components/editor/line-item-card';
-import type { TripFull, DestinationState, RateRow } from './types';
+import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
 
 export function isHotelItem(item: HotelItemState | LineItemState): item is HotelItemState {
   return item.type === 'hotel';
@@ -10,6 +10,7 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
   return raw.map(d => ({
     id: d.id, name: d.name, country: d.country,
     checkin: d.checkin, checkout: d.checkout, nights: d.nights, sortOrder: d.sortOrder,
+    visaInfo: (d as { visaInfo?: VisaInfoState | null }).visaInfo ?? null,
     items: d.items.map(i => {
       if (i.type === 'hotel') {
         return {
