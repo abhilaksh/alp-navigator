@@ -14,6 +14,7 @@ import { BookingsPanel } from '@/components/editor/bookings-panel';
 import { ChecklistPanel } from '@/components/editor/checklist-panel';
 import { ShareModal } from '@/components/editor/share-modal';
 import { ClientContextPanel } from '@/components/editor/client-context-panel';
+import { PaymentPanel } from '@/components/editor/payment-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -157,7 +158,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
-  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist'>('editor');
+  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment'>('editor');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [showShare, setShowShare]   = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
@@ -829,6 +830,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
           )}
         </button>
+
+        {/* Payment tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'payment' ? 'editor' : 'payment')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'payment' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'payment' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Payment
+          {activeView === 'payment' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
       </nav>
 
       {/* Main editor body */}
@@ -856,6 +873,25 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             adults={adults}
             destinations={destinations}
           />
+        )}
+
+        {/* Payment view */}
+        {activeView === 'payment' && (
+          <div className="flex-1 overflow-y-auto" style={{ background: '#F6F4EE', padding: '28px 32px 80px' }}>
+            <div className="max-w-[520px]">
+              <h2 className="font-display text-[20px] font-normal text-ink tracking-tight mb-1" style={{ letterSpacing: '-0.01em' }}>
+                Payment Tracking
+              </h2>
+              <p className="font-sans text-[11px] text-ink-mute mb-6">
+                Deposit and balance status for {label}.
+              </p>
+              <PaymentPanel
+                tripId={id}
+                totalFromInr={totalFromInr}
+                paymentDataRaw={(initialTrip as { paymentData?: string | null }).paymentData ?? null}
+              />
+            </div>
+          </div>
         )}
 
         {/* Editor view */}

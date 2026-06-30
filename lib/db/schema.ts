@@ -102,6 +102,7 @@ export const trips = mysqlTable('trips', {
   fxUsdToInr: real('fx_usd_to_inr'),                   // locked rate after buffer
   firstViewedAt: bigint('first_viewed_at', { mode: 'number' }),  // epoch ms, set on first preview load
   viewCount: int('view_count').notNull().default(0),              // total preview page loads
+  paymentData: text('payment_data'),                              // JSON: PaymentTracking
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
