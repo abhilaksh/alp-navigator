@@ -208,6 +208,20 @@ export const rates = mysqlTable('rates', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ─── Trip Snapshots (proposal version history) ────────────────────────────────
+// Immutable snapshots taken before each edit to a sent/accepted/booked proposal.
+// The current live state is always in trips + destinations + trip_items + rates.
+// Snapshots capture a serialised point-in-time view for rollback.
+
+export const tripSnapshots = mysqlTable('trip_snapshots', {
+  id: int('id').autoincrement().primaryKey(),
+  tripId: int('trip_id').notNull().references(() => trips.id, { onDelete: 'cascade' }),
+  version: int('version').notNull().default(1),
+  label: varchar('label', { length: 100 }),        // e.g. "Before edit on 14 Oct"
+  snapshotJson: text('snapshot_json').notNull(),    // full TripFull serialised as JSON
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // ─── Itinerary (day-by-day guide) ─────────────────────────────────────────────
 // Optional rich day-by-day planner and city guide layer. Separate from the
 // trip_items booking layer — this is the narrative/guide layer.
@@ -277,6 +291,11 @@ export const tripsRelations = relations(trips, ({ one, many }) => ({
   destinations: many(destinations),
   items: many(tripItems),
   itineraryDays: many(itineraryDays),
+  snapshots: many(tripSnapshots),
+}));
+
+export const tripSnapshotsRelations = relations(tripSnapshots, ({ one }) => ({
+  trip: one(trips, { fields: [tripSnapshots.tripId], references: [trips.id] }),
 }));
 
 export const destinationsRelations = relations(destinations, ({ one, many }) => ({
@@ -337,6 +356,8 @@ export type Rate = typeof rates.$inferSelect;
 export type NewRate = typeof rates.$inferInsert;
 export type ItineraryDay = typeof itineraryDays.$inferSelect;
 export type ItineraryBlock = typeof itineraryBlocks.$inferSelect;
+export type TripSnapshot = typeof tripSnapshots.$inferSelect;
+export type NewTripSnapshot = typeof tripSnapshots.$inferInsert;
 
 // Required by auth middleware
 export type TeamDataWithMembers = Team & {

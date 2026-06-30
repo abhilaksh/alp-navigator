@@ -15,6 +15,7 @@ import { ChecklistPanel } from '@/components/editor/checklist-panel';
 import { ShareModal } from '@/components/editor/share-modal';
 import { ClientContextPanel } from '@/components/editor/client-context-panel';
 import { PaymentPanel } from '@/components/editor/payment-panel';
+import { VersionHistoryPanel } from '@/components/editor/version-history-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -1063,6 +1064,14 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 1; }}
                 />
               )}
+
+              {/* Version history */}
+              <div className="mb-[18px]">
+                <VersionHistoryPanel
+                  tripId={id}
+                  tripStatus={status}
+                />
+              </div>
 
               {/* Client context (preferences + passport) */}
               {clientId && (

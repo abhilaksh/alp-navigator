@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { trips, teamMembers } from '@/lib/db/schema';
+import { trips, teamMembers, tripSnapshots } from '@/lib/db/schema';
 import { getUser, getTripById } from '@/lib/db/queries';
 
 type Params = { params: Promise<{ id: string }> };
@@ -59,6 +59,31 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   await db.update(trips).set(updates).where(eq(trips.id, tripId));
+
+  // Auto-snapshot when status first transitions to 'sent' or 'accepted'
+  if (status === 'sent' || status === 'accepted') {
+    try {
+      const tripFull = await getTripById(tripId);
+      if (tripFull) {
+        const [last] = await db
+          .select({ version: tripSnapshots.version })
+          .from(tripSnapshots)
+          .where(eq(tripSnapshots.tripId, tripId))
+          .orderBy(desc(tripSnapshots.version))
+          .limit(1);
+        const nextVer = (last?.version ?? 0) + 1;
+        const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        await db.insert(tripSnapshots).values({
+          tripId,
+          version: nextVer,
+          label: `Auto — ${status === 'sent' ? 'Sent' : 'Accepted'} ${dateStr}`,
+          snapshotJson: JSON.stringify(tripFull),
+        });
+      }
+    } catch {
+      // snapshot failure is non-fatal
+    }
+  }
 
   const [updated] = await db
     .select()
