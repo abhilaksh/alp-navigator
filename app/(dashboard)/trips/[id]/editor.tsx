@@ -28,6 +28,11 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated                    = useRef(false);
 
+  const [fxDate, setFxDate]         = useState<string | null>((initialTrip as { fxDate?: string | null }).fxDate ?? null);
+  const [fxSource, setFxSource]     = useState<string | null>((initialTrip as { fxSource?: string | null }).fxSource ?? null);
+  const [fxBufferPct, setFxBuf]     = useState<number | null>((initialTrip as { fxBufferPct?: number | null }).fxBufferPct ?? null);
+  const [fxUsdToInr, setFxRate]     = useState<number | null>((initialTrip as { fxUsdToInr?: number | null }).fxUsdToInr ?? null);
+
   const activeDest  = destinations.find(d => d.id === activeDestId) ?? null;
   const hotelItems  = (activeDest?.items ?? []).filter(isHotelItem);
   const clientName  = initialTrip.client?.name ?? null;
@@ -79,6 +84,20 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   function handleNotesChange(v: string) {
     setNotes(v);
     scheduleSave({ notes: v });
+  }
+
+  async function handleFxSave(fx: { fxDate: string; fxSource: string; fxBufferPct: number; fxUsdToInr: number } | null) {
+    if (fx) {
+      setFxDate(fx.fxDate); setFxSource(fx.fxSource);
+      setFxBuf(fx.fxBufferPct); setFxRate(fx.fxUsdToInr);
+    } else {
+      setFxDate(null); setFxSource(null); setFxBuf(null); setFxRate(null);
+    }
+    await fetch(`/api/trips/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fx ?? { fxDate: null, fxSource: null, fxBufferPct: null, fxUsdToInr: null }),
+    }).catch(() => {});
   }
 
   // ─── WhatsApp copy ──────────────────────────────────────────────────────────
@@ -215,6 +234,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       const newItem: HotelItemState = {
         id: data.item.id, type: 'hotel', title: hotel.name,
         bookingStatus: 'researching', sortOrder: hotelItems.length,
+        cancellationFreeUntil: null, visaRequired: 0,
         hotelDetails: {
           id: data.hotelDetail.id, itemId: data.item.id,
           stars: hotel.stars, rating: hotel.rating, locationScore: null,
@@ -240,6 +260,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       const newItem: HotelItemState = {
         id: data.item.id, type: 'hotel', title: 'New hotel',
         bookingStatus: 'researching', sortOrder: hotelItems.length,
+        cancellationFreeUntil: null, visaRequired: 0,
         hotelDetails: {
           id: data.hotelDetail.id, itemId: data.item.id,
           stars: null, rating: null, locationScore: null,
@@ -329,6 +350,30 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }).catch(() => {});
   }
 
+  function handleCancellationFreeUntilChange(itemId: number, date: string | null) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => i.id !== itemId ? i : { ...i, cancellationFreeUntil: date }),
+    })));
+    fetch(`/api/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancellationFreeUntil: date }),
+    }).catch(() => {});
+  }
+
+  function handleVisaRequiredChange(itemId: number, value: number) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => i.id !== itemId ? i : { ...i, visaRequired: value }),
+    })));
+    fetch(`/api/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visaRequired: value }),
+    }).catch(() => {});
+  }
+
   // ─── Rate mutations ──────────────────────────────────────────────────────────
   async function handleAddRate(hotelDetailId: number) {
     const res = await fetch('/api/rates', {
@@ -415,6 +460,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         id: data.id, type, title: data.title,
         bookingStatus: 'researching', bookingRef: null,
         confirmedTotalInr: null, startDate: null, endDate: null,
+        cancellationFreeUntil: null, visaRequired: 0,
         detailsJson: null, sortOrder: (activeDest?.items.length ?? 0),
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
@@ -439,12 +485,14 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   }
 
   // ─── Computed ───────────────────────────────────────────────────────────────
-  const totalFromInr = useMemo(() => {
+  const { totalFromInr, isFromPrice } = useMemo(() => {
     let total = 0;
+    let hasEstimated = false;
     for (const dest of destinations) {
       for (const item of dest.items) {
         if (!isHotelItem(item)) {
           if (item.confirmedTotalInr) total += item.confirmedTotalInr;
+          if ((item.detailsJson as { isEstimated?: boolean } | null)?.isEstimated) hasEstimated = true;
           continue;
         }
         const rates = item.hotelDetails?.rates?.filter(r => r.status === 'done' && r.parsedData) ?? [];
@@ -456,7 +504,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         if (totals.length > 0) total += Math.min(...totals);
       }
     }
-    return total > 0 ? total : null;
+    return { totalFromInr: total > 0 ? total : null, isFromPrice: hasEstimated };
   }, [destinations]);
 
   useEffect(() => {
@@ -499,6 +547,12 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         onWhatsApp={handleWhatsApp}
         onPreview={handlePreview}
         totalFromInr={totalFromInr}
+        isFromPrice={isFromPrice}
+        fxDate={fxDate}
+        fxSource={fxSource}
+        fxBufferPct={fxBufferPct}
+        fxUsdToInr={fxUsdToInr}
+        onFxSave={handleFxSave}
       />
 
       {/* Tab strip */}
@@ -685,6 +739,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                         onLocationScoreChange={handleLocationScoreChange}
                         onLocationScoreBlur={handleLocationScoreBlur}
                         onHoldExpiryChange={handleHoldExpiryChange}
+                        onCancellationFreeUntilChange={handleCancellationFreeUntilChange}
+                        onVisaRequiredChange={handleVisaRequiredChange}
                       />
                     );
                   }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, MessageCircle, Eye, Loader2 } from 'lucide-react';
+import { ChevronDown, MessageCircle, Eye, Loader2, DollarSign, X } from 'lucide-react';
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
 export type WorkflowStatus = 'draft' | 'sent' | 'accepted' | 'booked';
@@ -24,6 +24,12 @@ interface TopbarProps {
   onWhatsApp: () => void;
   onPreview: () => void;
   totalFromInr?: number | null;
+  isFromPrice?: boolean;
+  fxDate?: string | null;
+  fxSource?: string | null;
+  fxBufferPct?: number | null;
+  fxUsdToInr?: number | null;
+  onFxSave?: (fx: { fxDate: string; fxSource: string; fxBufferPct: number; fxUsdToInr: number } | null) => void;
 }
 
 export function Topbar({
@@ -33,15 +39,27 @@ export function Topbar({
   saveStatus,
   onWhatsApp, onPreview,
   totalFromInr,
+  isFromPrice = true,
+  fxDate, fxSource, fxBufferPct, fxUsdToInr, onFxSave,
 }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showFxPanel, setShowFxPanel] = useState(false);
   const pillRef = useRef<HTMLDivElement>(null);
+  const fxRef = useRef<HTMLDivElement>(null);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [fxForm, setFxForm] = useState({
+    fxDate: fxDate ?? today,
+    fxSource: fxSource ?? 'RBI',
+    fxBufferPct: fxBufferPct != null ? String(fxBufferPct) : '2.5',
+    fxUsdToInr: fxUsdToInr != null ? String(fxUsdToInr) : '',
+  });
+  const fxLocked = fxUsdToInr != null;
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (pillRef.current && !pillRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
+      if (pillRef.current && !pillRef.current.contains(e.target as Node)) setShowDropdown(false);
+      if (fxRef.current && !fxRef.current.contains(e.target as Node)) setShowFxPanel(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -49,6 +67,21 @@ export function Topbar({
 
   const metaParts = [clientName, `${adults} adult${adults !== 1 ? 's' : ''}`]
     .filter(Boolean).join(' · ');
+
+  function handleFxSave() {
+    if (!onFxSave) return;
+    const rate = parseFloat(fxForm.fxUsdToInr);
+    const buf = parseFloat(fxForm.fxBufferPct);
+    if (!rate || isNaN(rate)) return;
+    onFxSave({ fxDate: fxForm.fxDate, fxSource: fxForm.fxSource, fxBufferPct: isNaN(buf) ? 2.5 : buf, fxUsdToInr: rate });
+    setShowFxPanel(false);
+  }
+
+  function handleFxClear() {
+    if (!onFxSave) return;
+    onFxSave(null);
+    setShowFxPanel(false);
+  }
 
   return (
     <header
@@ -70,10 +103,7 @@ export function Topbar({
           value={label}
           onChange={e => onLabelChange(e.target.value)}
           className="font-display text-base font-normal text-white bg-transparent border-none border-b border-b-transparent outline-none p-0 w-full tracking-tight"
-          style={{
-            borderBottom: '1px solid transparent',
-            transition: 'border-color 0.14s ease',
-          }}
+          style={{ borderBottom: '1px solid transparent', transition: 'border-color 0.14s ease' }}
           onMouseEnter={e => (e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.2)')}
           onMouseLeave={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
           onFocus={e => (e.currentTarget.style.borderBottomColor = 'rgba(169,139,82,0.7)')}
@@ -88,6 +118,91 @@ export function Topbar({
         </div>
       </div>
 
+      {/* FX rate lock */}
+      {onFxSave && (
+        <div className="relative flex-shrink-0" ref={fxRef}>
+          <button
+            onClick={() => setShowFxPanel(v => !v)}
+            className="h-[52px] px-3.5 flex flex-col justify-center gap-px text-left transition-colors"
+            style={{ borderLeft: '1px solid rgba(255,255,255,0.09)', minWidth: 64 }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            title="Lock exchange rate"
+          >
+            <span className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.1em]" style={{ color: 'rgba(201,162,106,0.6)' }}>
+              <DollarSign size={9} />FX
+            </span>
+            <span className="font-mono text-[12px]" style={{ color: fxLocked ? 'rgba(201,162,106,0.92)' : 'rgba(255,255,255,0.28)' }}>
+              {fxLocked ? `₹${fxUsdToInr!.toFixed(0)}` : '—'}
+            </span>
+          </button>
+
+          {showFxPanel && (
+            <div
+              className="absolute top-full right-0 mt-1 rounded-[4px] p-4 z-[200]"
+              style={{ background: '#F6F4EE', border: '1px solid #C9D2CC', boxShadow: '0 4px 20px rgba(0,0,0,0.13)', width: 280 }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-sans text-[13px] font-semibold text-ink">Lock exchange rate</span>
+                <button onClick={() => setShowFxPanel(false)} className="text-ink-mute hover:text-ink transition-colors"><X size={13} /></button>
+              </div>
+              <p className="text-[11px] text-ink-soft font-sans mb-3 leading-[1.5]">
+                Documents the USD→INR rate used when building this quote.
+              </p>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label className="block text-[9px] uppercase tracking-[0.08em] text-ink-mute mb-1">Date locked</label>
+                  <input type="date" value={fxForm.fxDate}
+                    onChange={e => setFxForm(p => ({ ...p, fxDate: e.target.value }))}
+                    className="w-full px-2 py-[5px] border border-glacier rounded-sm text-[11px] font-mono text-ink bg-white outline-none"
+                    onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')} />
+                </div>
+                <div>
+                  <label className="block text-[9px] uppercase tracking-[0.08em] text-ink-mute mb-1">Source</label>
+                  <select value={fxForm.fxSource}
+                    onChange={e => setFxForm(p => ({ ...p, fxSource: e.target.value }))}
+                    className="w-full px-2 py-[5px] border border-glacier rounded-sm text-[11px] font-sans text-ink bg-white outline-none cursor-pointer">
+                    <option>RBI</option><option>Wise</option><option>XE</option><option>manual</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                  <label className="block text-[9px] uppercase tracking-[0.08em] text-ink-mute mb-1">USD → INR</label>
+                  <input type="number" placeholder="84.50" value={fxForm.fxUsdToInr}
+                    onChange={e => setFxForm(p => ({ ...p, fxUsdToInr: e.target.value }))}
+                    className="w-full px-2 py-[5px] border border-glacier rounded-sm text-[11px] font-mono text-ink bg-white outline-none"
+                    onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')} />
+                </div>
+                <div>
+                  <label className="block text-[9px] uppercase tracking-[0.08em] text-ink-mute mb-1">Buffer %</label>
+                  <input type="number" step="0.5" placeholder="2.5" value={fxForm.fxBufferPct}
+                    onChange={e => setFxForm(p => ({ ...p, fxBufferPct: e.target.value }))}
+                    className="w-full px-2 py-[5px] border border-glacier rounded-sm text-[11px] font-mono text-ink bg-white outline-none"
+                    onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleFxSave}
+                  className="flex-1 py-[6px] bg-spruce text-white text-[11px] font-medium font-sans rounded-sm cursor-pointer hover:opacity-90 transition-opacity">
+                  Lock rate
+                </button>
+                {fxLocked && (
+                  <button onClick={handleFxClear}
+                    className="px-3 py-[6px] text-ink-mute border border-glacier text-[11px] font-sans rounded-sm cursor-pointer hover:text-danger hover:border-danger transition-colors"
+                    style={{ background: 'transparent' }}>
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Total */}
       {totalFromInr != null && (
         <div
@@ -95,7 +210,7 @@ export function Topbar({
           style={{ borderLeft: '1px solid rgba(255,255,255,0.09)' }}
         >
           <span className="font-mono text-[9px] uppercase tracking-[0.1em]" style={{ color: 'rgba(201,162,106,0.6)' }}>
-            Trip from
+            {isFromPrice ? 'Trip from' : 'Trip total'}
           </span>
           <span className="font-mono text-sm font-medium" style={{ color: 'rgba(201,162,106,0.92)' }}>
             ₹{totalFromInr.toLocaleString('en-IN')}
@@ -105,7 +220,6 @@ export function Topbar({
 
       {/* Actions */}
       <div className="flex items-center gap-[7px] px-3.5 flex-shrink-0">
-        {/* Save status */}
         <SaveIndicator status={saveStatus} />
 
         {/* Workflow pill */}

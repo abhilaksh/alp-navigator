@@ -95,6 +95,11 @@ export const trips = mysqlTable('trips', {
   previewExpiresAt: bigint('preview_expires_at', { mode: 'number' }),
   totalFromInr: int('total_from_inr'),
   notes: text('notes'),             // internal advisor notes
+  // Exchange rate lock — documents the USD→INR rate used when building this quote
+  fxDate: varchar('fx_date', { length: 10 }),
+  fxSource: varchar('fx_source', { length: 50 }),       // 'RBI' | 'Wise' | 'XE' | 'manual'
+  fxBufferPct: real('fx_buffer_pct'),                   // buffer % applied (e.g. 2.5)
+  fxUsdToInr: real('fx_usd_to_inr'),                   // locked rate after buffer
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -139,6 +144,8 @@ export const tripItems = mysqlTable('trip_items', {
   endDate: varchar('end_date', { length: 10 }),
   startTime: varchar('start_time', { length: 8 }),        // HH:MM
   detailsJson: text('details_json'),                      // type-specific JSON for non-hotel types
+  cancellationFreeUntil: date('cancellation_free_until'), // confirmed booking: last free-cancel date
+  visaRequired: int('visa_required').notNull().default(0), // 1 = visa required for Indian passport
   sortOrder: int('sort_order').notNull().default(0),
   addedAt: timestamp('added_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),

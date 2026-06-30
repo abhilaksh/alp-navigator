@@ -15,6 +15,8 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
         return {
           id: i.id, type: i.type, title: i.title,
           bookingStatus: i.bookingStatus, sortOrder: i.sortOrder,
+          cancellationFreeUntil: (i as { cancellationFreeUntil?: string | null }).cancellationFreeUntil ?? null,
+          visaRequired: (i as { visaRequired?: number }).visaRequired ?? 0,
           hotelDetails: i.hotelDetails ? {
             id: i.hotelDetails.id, itemId: i.hotelDetails.itemId,
             stars: i.hotelDetails.stars, rating: i.hotelDetails.rating,
@@ -37,6 +39,8 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
         confirmedTotalInr: i.confirmedTotalInr ?? null,
         startDate: i.startDate ?? null,
         endDate: i.endDate ?? null,
+        cancellationFreeUntil: (i as { cancellationFreeUntil?: string | null }).cancellationFreeUntil ?? null,
+        visaRequired: (i as { visaRequired?: number }).visaRequired ?? 0,
         detailsJson: i.detailsJson
           ? (() => { try { return JSON.parse(i.detailsJson!); } catch { return null; } })()
           : null,

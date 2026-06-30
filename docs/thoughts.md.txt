@@ -1,0 +1,213 @@
+---
+The Itinerary-Building Process: A Full Analysis
+
+How a High-End Travel Advisor Actually Works — and What Software That Serves Them Must Do
+
+---
+Phase 1 — Intake & Understanding
+
+What it is. The phase begins on first contact and ends when the advisor has a structured brief specific enough to begin supplier research. The work is not data collection — it is translation: converting a vague human desire ("something special for our anniversary") into a structured constraint set that another person could act on without calling the client again.
+
+Why it takes the form it does. OTA booking has no intake because the product is standardized. Corporate travel has a compressed intake because constraints are pre-set by policy. Luxury advisory requires a full intake because customization is the product. The advisor bears reputational risk if the trip goes wrong. The intake conversation is itself part of the luxury product — it signals to the client that a real professional is engaged.
+
+How it works operationally. Elite firms use a structured framework but administer it conversationally, not as a form. The most diagnostic question is: what went wrong on your last trip? A client who says "everything was fine" is hard to design for. A client who says "the excursions were too regimented" has just eliminated 40% of the shortlist. After the call, a short post-conversation summary is sent to the client: "Here's what I understood — does this look right?" This serves double duty as confirmation and implicit upsell. The phase ends when an internal brief passes the "substitute test": could another advisor, given this brief alone, begin research without calling the client?
+
+Key software requirements for Navigator:
+
+- Trip record with structured intake fields: Destination(s), hard vs. flexible dates, party composition (adults + children with ages), occasion, budget stated, budget advisor-estimated (separate fields — clients understate), urgency flag
+- Client profile (persistent across all trips): Dietary restrictions, mobility limitations, room preferences, prior destination history, what they disliked on past trips, communication preference, decision-making dynamic (who leads in a couple)
+- Intake status workflow: New Inquiry → Acknowledged → Intake In Progress → Brief Complete → Research Ready, with timestamps and SLA alerts (flag if >1 hour to acknowledge)
+- Pending clarification flags: Individual fields flaggable as "awaiting client confirmation" with a linked follow-up reminder
+- Budget pipeline entry: Once a brief has a confirmed budget range, auto-calculate estimated commission value and add to pipeline forecast
+
+What Navigator does today: Trip creation exists. Client records exist with basic fields. What's missing: The intake status workflow. The persistent client preferences profile. The budget-to-pipeline calculation. The pending clarification flags.
+
+---
+Phase 2 — Research & Selection
+
+What it is. Two distinct sub-phases collapsed in practice: research (cast a wide net, build a long list of 15–40 properties) and selection (narrow to 2–4 shortlisted proposals with stated rationale per property). The tool's job is to prevent the most common failure: presenting a search dump instead of a curated recommendation.
+
+Why it's structurally complex. A client can search Booking.com. They cannot: access preferred partner rates with Virtuoso/Fora amenities, apply an advisor's personal familiarity and institutional knowledge of a property, evaluate which room category matters for this specific client's needs, or filter on trust earned through past bookings. The entire value of this phase is non-automatable judgment — the software's job is to eliminate the 60–90 minutes of tab-switching and portal-hopping that precedes that judgment, not to replace it.
+
+The selection decision process. Start with preferred partner lists (Fora portal, Virtuoso). Apply the client profile as a filter — these inputs eliminate properties before anything else is consulted. Check availability signals. Compare rates across Fora, Expedia TAAP, and direct. Apply personal familiarity and property notes. Compose a shortlist of 2–3 with "why this one" reasoning per property.
+
+The "why this one" reasoning is the most important sentence the advisor writes in this phase. "The Gora Kadan is the only ryokan in Hakone with private onsen pools attached to each room, which matters given your early December timing" demonstrates judgment. "5 stars on Booking.com" does not.
+
+Key software requirements for Navigator:
+
+- Property database with preferred status surfaced prominently (Fora preferred, Virtuoso, both, neither) — not buried in a detail panel. This is the first filter and must be visible at list level.
+- Advisor familiarity score per property (1–5, with date of last personal stay or FAM report)
+- "Our take" notes that are version-tracked — a note written after a 2019 FAM visit may be stale by 2026
+- Client feedback history linked to each property (positive and negative, tagged by trip)
+- Elimination notes: Why a property was considered and cut for a specific brief. This is universally missing from existing tools and is the most valuable institutional memory feature — the second time a similar brief arrives, the research is already done.
+- Brief-to-shortlist workspace: A project-scoped view where the advisor can mark properties as "in consideration," "shortlisted," or "eliminated with reason"
+- Quick comparison view: Side-by-side of 2–4 properties on the attributes that matter for this brief
+
+What Navigator does today: Google Hotels search (SerpAPI) and WordPress portfolio search exist. Hotel cards with "Our take" and location score exist. What's missing: Preferred status prominently surfaced at list level. Elimination notes. Familiarity scoring. Brief-linked shortlist workspace. Client feedback history on properties.
+
+---
+Phase 3 — Pricing & Quoting
+
+What it is. A rate check is a single lookup. A quote is a synthesis of every cost component for a specific client, itinerary, and travel window, expressed in one currency, with documented margin and an expiry date. A quote is not complete until all components have a number, an estimated number, or an explicit "TBD with reason."
+
+The complete list of line item types:
+1. Hotel room (per room/per night, source-tagged, Virtuoso amenity value calculated)
+2. Flights (per person, cabin class, estimated vs. confirmed, expiry date)
+3. Airport transfers (per vehicle, origin-destination, quote reference)
+4. Activities/experiences (per person or flat fee, operator)
+5. Visa fees (per person — critical for Indian passport holders)
+6. Advisor service fee (flat or %, GST-applicable)
+7. Miscellaneous with note field
+
+Why luxury pricing is structurally complex. Net rates vs. retail: through Fora's preferred hotel program, the advisor may access a net rate of ₹960 on a room priced at ₹1,200. The client pays ₹1,200; the advisor earns the spread. This requires active pricing, not pass-through. Currency risk: hotel rates are in USD/EUR; the advisor must convert to INR with a documented buffer (2–4%) to absorb rupee movement between quote and booking. Rate validity: a confirmed rate expires — typically 24–72 hours for portal rates, or as stated in email quotes. Quoting with expired rates is a professional failure.
+
+The "Total from ₹X" convention. Quoting a floor rather than a fixed price is correct practice. Flights are the primary source of variance — until ticketed, the fare can change. The advisor quotes "from ₹X" when any line item is in estimate mode. When everything is confirmed, the total is exact. Navigator must support both modes.
+
+Key software requirements for Navigator:
+
+- Complete line item system supporting all 7 types above with source-tagging, currency handling, and expiry dates
+- Per-quote exchange rate lock: Date, source, buffer percentage, locked INR rate — all saved per quote. All INR calculations use the locked rate.
+- Rate expiry UX: Color indicator per line item (green/amber/red), "rates expired" banner at quote level when any item has lapsed
+- "From ₹X" floor mode: When any line item is marked "estimated," the grand total displays as "from ₹X" — not an exact figure
+- Traveler configuration: Adults + children with ages + rooms — the system must handle per-person vs. per-room vs. per-vehicle pricing correctly
+- Internal vs. client-facing view: Net rates, margins, and commission data visible to advisor only; client-facing document shows gross totals and inclusions
+- Virtuoso amenity value calculation: Per hotel, show the cash value of included amenities (breakfast × nights + hotel credit + transfer value) as a sub-line — this is the advisor's proof of value
+
+What Navigator does today: AI-parsed hotel rates exist, with room type/dates/total/cancellation policy/perks. Multiple rate sources per hotel. Rate history. Google Hotels reference pricing. What's missing: Everything outside hotel rates — flights, transfers, activities, visa fees, service fees. Trip total. Exchange rate lock. Rate expiry UX. Internal vs. client view distinction.
+
+---
+Phase 4 — Storytelling & Proposal Writing
+
+What it is. A quote tells a client what a trip costs. A proposal tells them why this specific trip, arranged this specific way, at this specific moment in their life, is the right one. The advisor's internal working document (rate sheet, confirmation numbers, margin calculations) is a production tool. The proposal is the transformation of that data into a purchase experience.
+
+Why it's structurally necessary, not decorative. High-net-worth clients don't have an access problem. They have a decision problem. The proposal resolves uncertainty by converting an abstract idea into a specific, beautiful, legible vision they can commit to. More practically: in a dense referral network like India's HNW community, a beautifully produced proposal gets forwarded. "I used this advisor — look at what he put together" is a primary acquisition channel. Every proposal is a marketing document for the next client.
+
+Standard anatomy of a luxury proposal (per Black Tomato, Scott Dunn, Pelorus):
+1. Cover/hero — full-bleed image, client name, destination, dates. No prices, no logistics.
+2. Personal note (2–4 sentences, free text, never AI-generated) — references what the client told the advisor
+3. Journey overview — a narrative paragraph about the emotional arc of the trip, not a logistics sequence
+4. Destination chapters — 1 per destination: editorial overview, anchor image, what's happening there
+5. Day-by-day itinerary — each day: hero line, 2–4 sentence narrative, hotel name, Virtuoso/Fora perks called out inline (not fine print)
+6. Hotel spotlights — optional; "why this one" reasoning is the sentence that does the most work
+7. Rate summary — total in INR + USD, what's included, what's not, partner perks with cash value
+8. Terms, booking process, next steps — clear single call to action
+
+AI's role, precisely defined. AI is appropriate for: destination overview sections (input: destination + advisor notes), day-by-day narrative paragraphs (input: hotel + activities + advisor notes), hotel spotlight paragraphs (input: hotel name + room + advisor's reason + perks). AI must not write the personal note. AI must not generate "why this property" reasoning without the advisor's specific input — those two places are where the advisor's voice is the product being delivered.
+
+Key software requirements for Navigator:
+
+- Proposal builder with the 8 sections above as structured inputs, not a blank document
+- Day-by-day builder: itinerary blocks (hotel, transfers, activities) shown as structured inputs → "Generate narrative" button → editable AI output
+- "Why this property" as a required field before AI generates hotel spotlight copy
+- Photography slots per section with Pexels/Unsplash in-tool search + upload + URL paste
+- "Full proposal" vs. "Light proposal" modes: Light mode for repeat clients = personal note + rate summary + inclusions only
+- WhatsApp summary generator: Auto-condenses proposal to 5–8 lines ready to paste into WhatsApp — not a replacement for the proposal, an on-ramp to it
+- PDF export from the same source as the web preview
+
+What Navigator does today: Shareable preview URL exists. Hotel rates and destinations render on preview. WhatsApp copy button (full format). Email button. What's missing: The entire proposal builder. Day-by-day narrative section. Destination overview copy. Hotel spotlights. Photography per section. Personal note. The distinction between "working document" view (rates, margin) and "proposal" view (clean, client-facing).
+
+---
+Phase 5 — Sharing & Revision
+
+What it is. Begins when the advisor sends the proposal. Ends when the client gives unambiguous acceptance. Between those two events: client reviews, discusses with family, asks questions, the advisor revises, the cycle repeats. At premium firms this runs 2–4 cycles for a standard booking, 6–8 for group travel or high-stakes trips.
+
+Why revision cycles are structural, not avoidable. Three forces: social verification (HNW clients rarely decide unilaterally on six-figure purchases — a spouse, a parent, a trusted friend gets consulted); scarcity anxiety (knowing that the best suite has limited availability creates decision stress, not urgency); and trust calibration (for new clients, the revision phase is a test of the advisor — how quickly they respond, how good the alternatives are, whether the client feels heard). The advisor who handles a revision well builds more trust than a perfect first proposal.
+
+The hold expiry problem. This is the highest-stakes operational issue in this phase. A "soft hold" or "option" placed at a property typically lasts 48–72 hours. If the client delays, holds expire and the room may go to general availability. The itinerary the client fell in love with may not be available by the time they decide. This is a countdown timer with consequences, not an administrative note.
+
+Version control in practice. Most firms maintain a "current proposal" and archive all prior versions. When the client says "actually I preferred the original hotel from version 1," the advisor needs to be able to go back. Archive versions are immutable snapshots. The current version is what the client sees on their link. The navigator's shareable URL should always resolve to the current version but support parameterized version links for revisiting prior states.
+
+Key software requirements for Navigator:
+
+- Proposal state machine: Draft → Sent → In Revision → Option Held → Accepted → Booked → Archived — with timestamps and the specific message or event that triggered each state transition
+- Version management: Every revision to a sent proposal auto-snapshots the previous version before saving. Version history visible to advisor; specific version links shareable to client.
+- Hold expiry alerts: The highest-priority automated notification in Phase 5. For each property, the advisor enters a hold expiry date/time. Navigator alerts at 48h before, 24h before, and day-of. Each alert links to the itinerary segment and the property contact. The advisor marks holds as extended/confirmed/released from the alert.
+- Follow-up cadence prompts: After a proposal is Sent, prompt at 48h (no response), 5 days (still no engagement)
+- Change request capture: Log client feedback against a specific version — free text + change category (hotel swap, date change, activity addition, budget adjustment)
+- Pipeline dashboard: All proposals currently Sent or In Revision, hold expiry dates in next 7 days, proposals without engagement >5 days — the single most valuable view for a solo advisor managing a full book
+
+What Navigator does today: Shareable preview URL. WhatsApp copy, email button. Trip status field (from Phase 3 plan — partially built). What's missing: Proposal versioning. Hold expiry alerts. Follow-up cadence prompts. The proposal state machine with acceptance capture. The pipeline dashboard.
+
+---
+Phase 6 — Booking & Confirmation
+
+What it is. Begins on client acceptance. Ends when every supplier has returned a confirmed booking reference, the advisor has verified each confirmation against what was quoted, and a compiled final itinerary has been sent to the client. The distinction between placing a booking and having it confirmed is not semantic — until the supplier returns a written confirmation with a booking reference, nothing is real.
+
+Booking sequence at a systematic firm. Hotels first (most constrained inventory, longest lead for special requests) → flights within 48 hours → transfers within 72 hours → activities last (except high-demand experiences which should be booked alongside hotels).
+
+Special requests: the most common failure point. A request transmitted is not a request confirmed. "Transmitted" and "acknowledged" are different states. Anniversary decoration, dietary restriction, mobility accommodation — each must be (a) sent in the booking notes, (b) confirmed by the supplier in writing, and (c) re-confirmed 48 hours before service. A request that was sent but not acknowledged may not be honored.
+
+Payment complexity for Indian clients. This is operationally complex and ignored by most tools. LRS (USD 250,000/year per person limit), TCS (5% on overseas tour packages — recoverable vs. income tax but affects cash flow), and practical constraints (many Indian-issued cards can't support a USD 15,000 hotel guarantee). The advisor must know payment method before booking — some hotels require a card guarantee at time of booking, others accept payment at property.
+
+The pre-travel check-in work. 14 days before departure: re-confirm all hotel bookings, re-confirm ground transfers, verify flight schedule hasn't been changed (airlines modify silently), re-confirm dietary requests with each hotel's F&B team, confirm celebration setups with guest relations, compile and send final itinerary document with emergency contacts per supplier.
+
+Key software requirements for Navigator:
+
+- Booking record fields per trip item: booking_ref, portal_ref, supplier type, confirmed room type, confirmed rate, meal plan, cancellation_free_until date, cancellation_penalty_after date, non_refundable_from date, visa_required flag (this confirmation needed for visa application)
+- Special requests module: Each request has its own record with request type, request text, status (requested / acknowledged / reconfirmed / delivered / failed), transmitted date, acknowledged date — not a text note field
+- Confirmation email parsing: Paste or forward a hotel confirmation email → AI extracts booking reference, dates, room type, rate, cancellation policy into a pre-filled form for advisor verification
+- Payment tracking: Method, currency, INR equivalent, TCS rate and amount applied, wire reference, payment status, amount due at property, due date
+- Pre-travel checklist: Auto-generated 14 days before departure date, per trip. Structured checklist with checkboxes, linked to specific booking records
+- Final itinerary generator: Pulls only confirmed bookings (not proposed), replaces estimated rates with confirmed rates, includes booking references and cancellation deadlines, outputs clean PDF sent to client. Should warn if any trip item is not yet confirmed.
+
+What Navigator does today: booking_status field (researching/quoted/confirmed/cancelled), booking_ref field on trip items. What's missing: Cancellation policy dates. Special requests with status tracking. Confirmation email parsing. Payment tracking. Pre-travel checklist. Final itinerary generator. Visa-required flag.
+
+---
+Master Software Gap Analysis
+
+Here is the complete picture of what the Navigator currently does vs. what the six-phase analysis says it must do:
+
+┌───────────┬──────────────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────┐
+│   Phase   │                   What exists                    │                                       Critical gaps                                        │
+├───────────┼──────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 1. Intake │ Trip creation, basic client record               │ Intake status workflow, persistent preferences profile, pending clarification flags,       │
+│           │                                                  │ budget-to-pipeline                                                                         │
+├───────────┼──────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 2.        │ Hotel search (Google + WP portfolio), "Our take" │ Preferred status at list level, elimination notes, familiarity scoring, shortlist          │
+│ Research  │  notes, location score                           │ workspace                                                                                  │
+├───────────┼──────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 3.        │ AI hotel rate parsing, multiple sources, rate    │ Flights, transfers, activities, visa fees, service fees, trip total, exchange rate lock,   │
+│ Pricing   │ history                                          │ rate expiry UX                                                                             │
+├───────────┼──────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 4.        │ Preview URL, WhatsApp format, email button       │ Proposal builder (all 8 sections), day-by-day narrative, AI writing assist, photography,   │
+│ Proposal  │                                                  │ PDF export                                                                                 │
+├───────────┼──────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 5.        │ Preview URL, basic trip status                   │ Proposal versioning, hold expiry alerts, follow-up cadence, acceptance capture, pipeline   │
+│ Sharing   │                                                  │ dashboard                                                                                  │
+├───────────┼──────────────────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 6.        │ booking_status, booking_ref                      │ Cancellation date fields, special requests module, confirmation parsing, payment tracking, │
+│ Booking   │                                                  │  pre-travel checklist, final itinerary generator                                           │
+└───────────┴──────────────────────────────────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────┘
+
+---
+Recommended Build Priority
+
+Based on what delivers the most advisor-hours saved per feature built:
+
+Tier 1 — Unlock the tool's daily utility (build next)
+1. Trip total calculation — the most-asked client question; Phase 3 gap; sum lowest confirmed rate per hotel across all destinations
+2. Flights as a line item type — the biggest quoting gap; even a manual entry with per-person / cabin class / estimated flag unblocks complete quotes
+3. Proposal versioning + hold expiry alerts — Phase 5; prevents the most costly failure mode (missing a hold deadline, losing a room the client accepted)
+4. Booking record enhancement — add cancellation policy date fields and visa-required flag to existing trip items; low effort, high value
+
+Tier 2 — Complete the quoting workflow
+5. Transfers and activities as line items (manual entry)
+6. Exchange rate lock per quote with configurable buffer
+7. Rate expiry indicators and "from ₹X" floor mode
+8. Client-facing vs. advisor view separation
+
+Tier 3 — Complete the proposal workflow
+9. Day-by-day itinerary builder (itinerary_blocks UI — schema already exists)
+10. AI writing assist for day narratives and destination overviews
+11. Photography slots per section
+12. PDF export from preview
+
+Tier 4 — Complete the pipeline
+13. Special requests module with status tracking
+14. Confirmation email parsing (AI-assisted)
+15. Pre-travel checklist generator
+16. Pipeline dashboard (proposals by state, hold expiry calendar)
+
+The single highest-ROI build right now is Tier 1: trip total + flights as a line item. Every client's first question is "what does this whole trip cost?" Until the tool can answer that, it's a hotel rate manager, not a quote builder.
+
+result: Six-phase deep dive complete — 6 parallel agents synthesized into a full operational analysis covering what each phase means, why it works the way it does, and a prioritized gap analysis against the current Navigator build.

@@ -26,7 +26,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!await resolveItem(itemId, user.id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { title, detailsJson, confirmedTotalInr, startDate, endDate, bookingStatus, bookingRef, sortOrder } = body;
+  const {
+    title, detailsJson, confirmedTotalInr, startDate, endDate,
+    bookingStatus, bookingRef, sortOrder, cancellationFreeUntil, visaRequired,
+  } = body;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (title !== undefined) updates.title = title;
@@ -37,6 +40,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (bookingStatus !== undefined) updates.bookingStatus = bookingStatus;
   if (bookingRef !== undefined) updates.bookingRef = bookingRef;
   if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+  if (cancellationFreeUntil !== undefined) updates.cancellationFreeUntil = cancellationFreeUntil;
+  if (visaRequired !== undefined) updates.visaRequired = visaRequired;
 
   await db.update(tripItems).set(updates).where(eq(tripItems.id, itemId));
   const [updated] = await db.select().from(tripItems).where(eq(tripItems.id, itemId)).limit(1);

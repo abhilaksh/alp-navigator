@@ -14,6 +14,8 @@ export interface LineItemState {
   confirmedTotalInr: number | null;
   startDate: string | null;
   endDate: string | null;
+  cancellationFreeUntil: string | null;
+  visaRequired: number;
   detailsJson: Record<string, unknown> | null;
   sortOrder: number;
 }
@@ -25,6 +27,7 @@ interface LineItemCardProps {
     title?: string; bookingStatus?: string; bookingRef?: string | null;
     confirmedTotalInr?: number | null; detailsJson?: Record<string, unknown> | null;
     startDate?: string | null; endDate?: string | null;
+    cancellationFreeUntil?: string | null; visaRequired?: number;
   }) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }
@@ -55,6 +58,7 @@ function inr(n: number | string | undefined | null): string {
 
 type Fields = {
   title: string; bookingStatus: string; bookingRef: string; confirmedTotalInr: string;
+  cancellationFreeUntil: string; visaRequired: boolean;
   // flight
   airline: string; from: string; to: string; flightNumber: string; cabinClass: string;
   departureDateTime: string; arrivalDateTime: string;
@@ -75,6 +79,8 @@ function initFields(item: LineItemState): Fields {
     title: item.title, bookingStatus: item.bookingStatus,
     bookingRef: item.bookingRef ?? '',
     confirmedTotalInr: item.confirmedTotalInr != null ? String(item.confirmedTotalInr) : '',
+    cancellationFreeUntil: item.cancellationFreeUntil ?? '',
+    visaRequired: item.visaRequired === 1,
     airline: s('airline'), from: s('from'), to: s('to'), flightNumber: s('flightNumber'),
     cabinClass: s('cabinClass', 'economy'), departureDateTime: s('departureDateTime'),
     arrivalDateTime: s('arrivalDateTime'), farePerPersonInr: s('farePerPersonInr'),
@@ -352,6 +358,8 @@ export function LineItemCard({ item, defaultOpen = false, onUpdate, onDelete }: 
         bookingRef: f.bookingRef || null,
         confirmedTotalInr: total,
         detailsJson,
+        cancellationFreeUntil: f.cancellationFreeUntil || null,
+        visaRequired: f.visaRequired ? 1 : 0,
       });
       setExpanded(false);
     } finally {
@@ -438,6 +446,33 @@ export function LineItemCard({ item, defaultOpen = false, onUpdate, onDelete }: 
           {item.type === 'flight'   && <FlightForm f={f} set={set} />}
           {item.type === 'transfer' && <TransferForm f={f} set={set} />}
           {(item.type === 'activity' || item.type === 'experience') && <ActivityForm f={f} set={set} />}
+
+          {/* Booking fields: cancel deadline + visa */}
+          <div className="mt-3 pt-2.5 flex items-end gap-3 flex-wrap" style={{ borderTop: '1px solid rgba(22,26,23,0.07)' }}>
+            <div className="min-w-[140px]">
+              <Label>Cancel free until</Label>
+              <input
+                type="date"
+                value={f.cancellationFreeUntil}
+                onChange={e => set('cancellationFreeUntil', e.target.value)}
+                className="w-full px-2 py-[5px] border border-glacier rounded-sm text-[11px] font-mono text-ink bg-white outline-none"
+                onFocus={e => (e.currentTarget.style.borderColor = '#A98B52')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#C9D2CC')}
+              />
+            </div>
+            <div className="flex items-center gap-1.5 pb-[6px]">
+              <input
+                type="checkbox"
+                id={`li-visa-${item.id}`}
+                checked={f.visaRequired}
+                onChange={e => set('visaRequired', e.target.checked)}
+                className="w-[13px] h-[13px] accent-spruce cursor-pointer"
+              />
+              <label htmlFor={`li-visa-${item.id}`} className="text-[11px] text-ink-soft font-sans cursor-pointer">
+                Visa required
+              </label>
+            </div>
+          </div>
 
           <div className="flex justify-end mt-3">
             <button

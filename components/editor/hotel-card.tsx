@@ -30,6 +30,8 @@ export interface HotelItemState {
   title: string;
   bookingStatus: string;
   sortOrder: number;
+  cancellationFreeUntil: string | null;
+  visaRequired: number;
   hotelDetails: HotelDetailState | null;
 }
 
@@ -50,6 +52,8 @@ interface HotelCardProps {
   onLocationScoreChange: (itemId: number, value: string) => void;
   onLocationScoreBlur: (hotelDetailId: number, value: string) => void;
   onHoldExpiryChange: (hotelDetailId: number, date: string | null) => void;
+  onCancellationFreeUntilChange: (itemId: number, date: string | null) => void;
+  onVisaRequiredChange: (itemId: number, value: number) => void;
 }
 
 function renderStars(n: number | null) {
@@ -61,7 +65,7 @@ export function HotelCard({
   item, index,
   onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
-  onHoldExpiryChange,
+  onHoldExpiryChange, onCancellationFreeUntilChange, onVisaRequiredChange,
 }: HotelCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingRemove, setPendingRemove] = useState(false);
@@ -275,6 +279,34 @@ export function HotelCard({
                   />
                 </div>
               )}
+
+              {/* Cancellation free until + visa required */}
+              <div className="flex gap-[18px] flex-wrap">
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[3px]">Cancel free until</div>
+                  <input
+                    type="date"
+                    value={item.cancellationFreeUntil ?? ''}
+                    onChange={e => onCancellationFreeUntilChange(item.id, e.target.value || null)}
+                    className="font-mono text-[12px] text-ink-soft bg-transparent border-none outline-none p-0 transition-colors"
+                    style={{ borderBottom: '1px solid transparent', colorScheme: 'light' }}
+                    onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
+                    onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                  />
+                </div>
+                <div className="flex items-center gap-[6px]">
+                  <input
+                    type="checkbox"
+                    id={`visa-${item.id}`}
+                    checked={item.visaRequired === 1}
+                    onChange={e => onVisaRequiredChange(item.id, e.target.checked ? 1 : 0)}
+                    className="cursor-pointer accent-brass w-[13px] h-[13px]"
+                  />
+                  <label htmlFor={`visa-${item.id}`} className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute cursor-pointer">
+                    Visa req.
+                  </label>
+                </div>
+              </div>
 
               {/* Our take */}
               <div>
