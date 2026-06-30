@@ -518,36 +518,33 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                     type="text"
                     value={activeDest.country ?? ''}
                     onChange={e => handleDestCountryChange(activeDest.id, e.target.value)}
-                    onBlur={e => handleDestCountryBlur(activeDest.id, e.target.value)}
+                    onBlur={e => { handleDestCountryBlur(activeDest.id, e.target.value); e.currentTarget.style.borderBottomColor = 'transparent'; }}
                     placeholder="Country"
                     className="font-sans text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors w-[90px]"
                     style={{ borderBottom: '1px solid transparent' }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
-                    onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
                   />
                   <span className="text-ink-mute text-[11px] opacity-40">·</span>
                   <input
                     type="text"
                     value={activeDest.checkin ?? ''}
                     onChange={e => handleDestCheckinChange(activeDest.id, e.target.value)}
-                    onBlur={() => handleDestDateBlur(activeDest.id)}
+                    onBlur={e => { handleDestDateBlur(activeDest.id); e.currentTarget.style.borderBottomColor = 'transparent'; }}
                     placeholder="Check-in"
                     className="font-mono text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors"
                     style={{ borderBottom: '1px solid transparent', width: 72 }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
-                    onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
                   />
                   <span className="text-ink-mute text-[11px]">→</span>
                   <input
                     type="text"
                     value={activeDest.checkout ?? ''}
                     onChange={e => handleDestCheckoutChange(activeDest.id, e.target.value)}
-                    onBlur={() => handleDestDateBlur(activeDest.id)}
+                    onBlur={e => { handleDestDateBlur(activeDest.id); e.currentTarget.style.borderBottomColor = 'transparent'; }}
                     placeholder="Check-out"
                     className="font-mono text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors"
                     style={{ borderBottom: '1px solid transparent', width: 72 }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
-                    onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
                   />
                   {nightsCalc != null && (
                     <span className="font-mono text-[11px] text-ink-mute">· {nightsCalc} nights</span>
