@@ -265,7 +265,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       items.splice(toIndex, 0, moved);
       const reordered = items.map((item, idx) => ({ ...item, sortOrder: idx }));
       reordered.forEach(item => {
-        if (item.hotelDetails) {
+        if (isHotelItem(item) && item.hotelDetails) {
           fetch(`/api/hotels/${item.hotelDetails.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -340,7 +340,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       const rate: RateRow = await res.json();
       setDests(prev => prev.map(d => ({
         ...d,
-        items: d.items.map(i => i.hotelDetails?.id === hotelDetailId
+        items: d.items.map(i => (isHotelItem(i) && i.hotelDetails?.id === hotelDetailId)
           ? { ...i, hotelDetails: { ...i.hotelDetails!, rates: [...i.hotelDetails!.rates, rate] } }
           : i),
       })));
@@ -351,7 +351,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     await fetch(`/api/rates/${rateId}`, { method: 'DELETE' }).catch(() => {});
     setDests(prev => prev.map(d => ({
       ...d,
-      items: d.items.map(i => i.hotelDetails
+      items: d.items.map(i => (isHotelItem(i) && i.hotelDetails)
         ? { ...i, hotelDetails: { ...i.hotelDetails, rates: i.hotelDetails.rates.filter(r => r.id !== rateId) } }
         : i),
     })));
@@ -509,7 +509,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         {destinations.map(dest => {
           const isActive = dest.id === activeDestId;
           const hasHotels = dest.items.length > 0;
-          const hasDoneRate = dest.items.some(i => i.hotelDetails?.rates.some(r => r.status === 'done'));
+          const hasDoneRate = dest.items.some(i => isHotelItem(i) && i.hotelDetails?.rates.some(r => r.status === 'done'));
           return (
             <button
               key={dest.id}
