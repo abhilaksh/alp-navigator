@@ -9,6 +9,7 @@ import { SearchPanel, type SearchResult } from '@/components/editor/search-panel
 import type { ParsedRate } from '@/lib/db/schema';
 import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
 import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, isHotelItem } from './editor-utils';
+import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
+  const [activeView, setActiveView]   = useState<'editor' | 'itinerary'>('editor');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -620,10 +622,37 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         >
           +
         </button>
+
+        {/* Separator */}
+        <div className="mx-2 my-2.5" style={{ width: 1, background: '#C9D2CC', flexShrink: 0 }} />
+
+        {/* Itinerary tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'itinerary' ? 'editor' : 'itinerary')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'itinerary' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'itinerary' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Itinerary
+          {activeView === 'itinerary' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
       </nav>
 
       {/* Main editor body */}
       <div className="flex flex-1 overflow-hidden">
+
+        {/* Itinerary view */}
+        {activeView === 'itinerary' && (
+          <ItineraryBuilder tripId={id} destinations={destinations} />
+        )}
+
+        {/* Editor view */}
+        {activeView === 'editor' && (<>
 
         {/* Left: hotels column */}
         <div
@@ -839,6 +868,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             onAddManual={handleAddManualHotel}
           />
         </div>
+        </>)}
       </div>
 
       {/* Status bar */}

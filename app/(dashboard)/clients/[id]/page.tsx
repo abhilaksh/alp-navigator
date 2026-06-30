@@ -65,7 +65,7 @@ const DECISION_OPTIONS = [
   { value: 'solo', label: 'Solo decider' },
   { value: 'leads', label: 'Leads the decision' },
   { value: 'joint', label: 'Joint decision' },
-  { value: 'follows', label: 'Follows partner's lead' },
+  { value: 'follows', label: "Follows partner's lead" },
 ];
 
 const BUDGET_OPTIONS = [

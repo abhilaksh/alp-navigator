@@ -172,7 +172,7 @@ export async function getHoldExpiryByTrip(userId: number): Promise<Map<number, s
 
   const map = new Map<number, string>();
   for (const r of rows) {
-    if (r.tripId && r.minHoldExpiry) map.set(r.tripId, r.minHoldExpiry);
+    if (r.tripId && r.minHoldExpiry) map.set(r.tripId, String(r.minHoldExpiry));
   }
   return map;
 }
