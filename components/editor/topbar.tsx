@@ -5,6 +5,7 @@ import { ChevronDown, MessageCircle, Eye, Loader2, DollarSign, X } from 'lucide-
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
 export type WorkflowStatus = 'draft' | 'sent' | 'accepted' | 'booked';
+export type IntakeStatus = 'new_inquiry' | 'acknowledged' | 'in_progress' | 'brief_complete' | 'research_ready';
 
 const WORKFLOW_META: Record<WorkflowStatus, { label: string; dot: string }> = {
   draft:    { label: 'Draft',    dot: 'bg-ink-mute' },
@@ -12,6 +13,15 @@ const WORKFLOW_META: Record<WorkflowStatus, { label: string; dot: string }> = {
   accepted: { label: 'Accepted', dot: 'bg-success' },
   booked:   { label: 'Booked',   dot: 'bg-spruce' },
 };
+
+const INTAKE_META: Record<IntakeStatus, { label: string; color: string }> = {
+  new_inquiry:    { label: 'New inquiry',    color: 'rgba(169,139,82,0.85)' },
+  acknowledged:   { label: 'Acknowledged',  color: 'rgba(169,139,82,0.65)' },
+  in_progress:    { label: 'Intake in progress', color: 'rgba(255,255,255,0.6)' },
+  brief_complete: { label: 'Brief complete', color: 'rgba(100,210,140,0.8)' },
+  research_ready: { label: 'Research ready', color: 'rgba(100,210,140,0.95)' },
+};
+const INTAKE_STATUSES = Object.keys(INTAKE_META) as IntakeStatus[];
 
 interface TopbarProps {
   label: string;
@@ -32,6 +42,9 @@ interface TopbarProps {
   onFxSave?: (fx: { fxDate: string; fxSource: string; fxBufferPct: number; fxUsdToInr: number } | null) => void;
   firstViewedAt?: number | null;
   viewCount?: number | null;
+  intakeStatus?: IntakeStatus | null;
+  onIntakeStatusChange?: (s: IntakeStatus) => void;
+  createdAt?: Date | null;
 }
 
 export function Topbar({
@@ -44,10 +57,13 @@ export function Topbar({
   isFromPrice = true,
   fxDate, fxSource, fxBufferPct, fxUsdToInr, onFxSave,
   firstViewedAt, viewCount,
+  intakeStatus, onIntakeStatusChange, createdAt,
 }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showIntakeDropdown, setShowIntakeDropdown] = useState(false);
   const [showFxPanel, setShowFxPanel] = useState(false);
   const pillRef = useRef<HTMLDivElement>(null);
+  const intakePillRef = useRef<HTMLDivElement>(null);
   const fxRef = useRef<HTMLDivElement>(null);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -59,9 +75,14 @@ export function Topbar({
   });
   const fxLocked = fxUsdToInr != null;
 
+  // SLA alert: new inquiry with no acknowledgement for >1 hour
+  const slaBreached = intakeStatus === 'new_inquiry' && createdAt != null
+    && (Date.now() - new Date(createdAt).getTime()) > 3600000;
+
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (pillRef.current && !pillRef.current.contains(e.target as Node)) setShowDropdown(false);
+      if (intakePillRef.current && !intakePillRef.current.contains(e.target as Node)) setShowIntakeDropdown(false);
       if (fxRef.current && !fxRef.current.contains(e.target as Node)) setShowFxPanel(false);
     }
     document.addEventListener('mousedown', handler);
@@ -227,6 +248,52 @@ export function Topbar({
           <ViewBadge firstViewedAt={firstViewedAt} viewCount={viewCount ?? 0} />
         )}
         <SaveIndicator status={saveStatus} />
+
+        {/* Intake status pill */}
+        {intakeStatus && onIntakeStatusChange && (
+          <div className="relative" ref={intakePillRef}>
+            <button
+              onClick={() => setShowIntakeDropdown(v => !v)}
+              className="inline-flex items-center gap-[5px] px-[9px] py-[3px] rounded-full text-[10px] font-medium tracking-[0.05em] cursor-pointer transition-colors"
+              style={{
+                border: `1px solid ${INTAKE_META[intakeStatus].color}`,
+                background: `${INTAKE_META[intakeStatus].color}1A`,
+                color: INTAKE_META[intakeStatus].color,
+              }}
+              title="Intake pipeline status"
+            >
+              {slaBreached && <span className="w-[5px] h-[5px] rounded-full bg-red-400 flex-shrink-0" />}
+              {INTAKE_META[intakeStatus].label}
+              <ChevronDown size={9} />
+            </button>
+
+            {showIntakeDropdown && (
+              <div
+                className="absolute top-full right-0 mt-1 bg-paper border border-glacier rounded overflow-hidden min-w-[180px] z-[200]"
+                style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+              >
+                <div className="px-3 py-2 border-b border-glacier">
+                  <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-mute">Intake pipeline</p>
+                </div>
+                {INTAKE_STATUSES.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => { onIntakeStatusChange(s); setShowIntakeDropdown(false); }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-[12px] text-ink hover:bg-paper-deep transition-colors text-left ${
+                      s === intakeStatus ? 'font-semibold' : ''
+                    }`}
+                  >
+                    <span
+                      className="w-[6px] h-[6px] rounded-full flex-shrink-0"
+                      style={{ background: INTAKE_META[s].color }}
+                    />
+                    {INTAKE_META[s].label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Workflow pill */}
         <div className="relative" ref={pillRef}>

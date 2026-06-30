@@ -103,6 +103,10 @@ export const trips = mysqlTable('trips', {
   firstViewedAt: bigint('first_viewed_at', { mode: 'number' }),  // epoch ms, set on first preview load
   viewCount: int('view_count').notNull().default(0),              // total preview page loads
   paymentData: text('payment_data'),                              // JSON: PaymentTracking
+  intakeStatus: varchar('intake_status', { length: 30 }).default('new_inquiry'),
+  // 'new_inquiry' | 'acknowledged' | 'in_progress' | 'brief_complete' | 'research_ready'
+  acknowledgedAt: bigint('acknowledged_at', { mode: 'number' }),  // epoch ms when status moved to acknowledged
+  briefCompleteAt: bigint('brief_complete_at', { mode: 'number' }), // epoch ms when brief was completed
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

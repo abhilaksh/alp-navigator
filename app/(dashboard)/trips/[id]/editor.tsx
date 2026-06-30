@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Plus, MapPin } from 'lucide-react';
-import { Topbar, type SaveStatus, type WorkflowStatus } from '@/components/editor/topbar';
+import { Topbar, type SaveStatus, type WorkflowStatus, type IntakeStatus } from '@/components/editor/topbar';
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
 import { LineItemCard, type LineItemState } from '@/components/editor/line-item-card';
 import { SearchPanel, type SearchResult } from '@/components/editor/search-panel';
@@ -169,6 +169,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [fxSource, setFxSource]     = useState<string | null>((initialTrip as { fxSource?: string | null }).fxSource ?? null);
   const [fxBufferPct, setFxBuf]     = useState<number | null>((initialTrip as { fxBufferPct?: number | null }).fxBufferPct ?? null);
   const [fxUsdToInr, setFxRate]     = useState<number | null>((initialTrip as { fxUsdToInr?: number | null }).fxUsdToInr ?? null);
+  const [intakeStatus, setIntakeStatus] = useState<IntakeStatus>(
+    ((initialTrip as { intakeStatus?: string | null }).intakeStatus as IntakeStatus | null) ?? 'new_inquiry'
+  );
 
   const activeDest  = destinations.find(d => d.id === activeDestId) ?? null;
   const hotelItems  = (activeDest?.items ?? []).filter(isHotelItem);
@@ -238,6 +241,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(fx ?? { fxDate: null, fxSource: null, fxBufferPct: null, fxUsdToInr: null }),
+    }).catch(() => {});
+  }
+
+  async function handleIntakeStatusChange(s: IntakeStatus) {
+    setIntakeStatus(s);
+    await fetch(`/api/trips/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intakeStatus: s }),
     }).catch(() => {});
   }
 
@@ -745,6 +757,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         onFxSave={handleFxSave}
         firstViewedAt={(initialTrip as { firstViewedAt?: number | null }).firstViewedAt ?? null}
         viewCount={(initialTrip as { viewCount?: number | null }).viewCount ?? null}
+        intakeStatus={intakeStatus}
+        onIntakeStatusChange={handleIntakeStatusChange}
+        createdAt={initialTrip.createdAt}
       />
 
       {/* Tab strip */}

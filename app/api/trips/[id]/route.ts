@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { label, adults, status, clientId, notes, totalFromInr, fxDate, fxSource, fxBufferPct, fxUsdToInr, paymentData } = body;
+  const { label, adults, status, clientId, notes, totalFromInr, fxDate, fxSource, fxBufferPct, fxUsdToInr, paymentData, intakeStatus } = body;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (label !== undefined) updates.label = label;
@@ -51,6 +51,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (fxBufferPct !== undefined) updates.fxBufferPct = fxBufferPct;
   if (fxUsdToInr !== undefined) updates.fxUsdToInr = fxUsdToInr;
   if (paymentData !== undefined) updates.paymentData = paymentData;
+  if (intakeStatus !== undefined) {
+    updates.intakeStatus = intakeStatus;
+    // Auto-stamp acknowledged_at on first acknowledgement
+    if (intakeStatus === 'acknowledged') updates.acknowledgedAt = Date.now();
+    if (intakeStatus === 'brief_complete') updates.briefCompleteAt = Date.now();
+  }
 
   await db.update(trips).set(updates).where(eq(trips.id, tripId));
 
