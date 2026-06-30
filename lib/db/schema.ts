@@ -100,6 +100,8 @@ export const trips = mysqlTable('trips', {
   fxSource: varchar('fx_source', { length: 50 }),       // 'RBI' | 'Wise' | 'XE' | 'manual'
   fxBufferPct: real('fx_buffer_pct'),                   // buffer % applied (e.g. 2.5)
   fxUsdToInr: real('fx_usd_to_inr'),                   // locked rate after buffer
+  firstViewedAt: bigint('first_viewed_at', { mode: 'number' }),  // epoch ms, set on first preview load
+  viewCount: int('view_count').notNull().default(0),              // total preview page loads
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

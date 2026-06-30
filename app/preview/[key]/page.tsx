@@ -2,6 +2,9 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getTripWithDetailsByPreviewKey } from '@/lib/db/queries';
 import { getUser } from '@/lib/db/queries';
+import { db } from '@/lib/db/drizzle';
+import { trips } from '@/lib/db/schema';
+import { eq, sql as drizzleSql } from 'drizzle-orm';
 import type { Metadata } from 'next';
 
 type Props = { params: Promise<{ key: string }> };
@@ -48,6 +51,19 @@ export default async function PreviewPage({ params }: Props) {
         </div>
       </div>
     );
+  }
+
+  // ── Track this view (fire-and-forget; never block render) ────────────────
+  // Only track when NOT viewed as the advisor (to avoid advisor visits inflating count)
+  if (!advisor) {
+    const now = Date.now();
+    db.update(trips)
+      .set({
+        firstViewedAt: drizzleSql`COALESCE(first_viewed_at, ${now})`,
+        viewCount: drizzleSql`view_count + 1`,
+      })
+      .where(eq(trips.id, trip.id))
+      .catch(() => {});
   }
 
   // ── Compute totals ────────────────────────────────────────────────────────

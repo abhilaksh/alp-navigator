@@ -30,6 +30,8 @@ interface TopbarProps {
   fxBufferPct?: number | null;
   fxUsdToInr?: number | null;
   onFxSave?: (fx: { fxDate: string; fxSource: string; fxBufferPct: number; fxUsdToInr: number } | null) => void;
+  firstViewedAt?: number | null;
+  viewCount?: number | null;
 }
 
 export function Topbar({
@@ -41,6 +43,7 @@ export function Topbar({
   totalFromInr,
   isFromPrice = true,
   fxDate, fxSource, fxBufferPct, fxUsdToInr, onFxSave,
+  firstViewedAt, viewCount,
 }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showFxPanel, setShowFxPanel] = useState(false);
@@ -220,6 +223,9 @@ export function Topbar({
 
       {/* Actions */}
       <div className="flex items-center gap-[7px] px-3.5 flex-shrink-0">
+        {firstViewedAt && (
+          <ViewBadge firstViewedAt={firstViewedAt} viewCount={viewCount ?? 0} />
+        )}
         <SaveIndicator status={saveStatus} />
 
         {/* Workflow pill */}
@@ -287,6 +293,32 @@ export function Topbar({
         </button>
       </div>
     </header>
+  );
+}
+
+function ViewBadge({ firstViewedAt, viewCount }: { firstViewedAt: number; viewCount: number }) {
+  const ms = Date.now() - firstViewedAt;
+  const mins   = Math.floor(ms / 60000);
+  const hours  = Math.floor(ms / 3600000);
+  const days   = Math.floor(ms / 86400000);
+  const ago = days >= 1
+    ? `${days}d ago`
+    : hours >= 1
+      ? `${hours}h ago`
+      : mins >= 1
+        ? `${mins}m ago`
+        : 'just now';
+
+  return (
+    <div
+      className="flex items-center gap-[5px] font-mono text-[9px] px-[7px] py-[3px] rounded-[3px]"
+      style={{ background: 'rgba(169,139,82,0.15)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.25)' }}
+      title={`First viewed ${new Date(firstViewedAt).toLocaleString('en-IN')} · ${viewCount} total view${viewCount !== 1 ? 's' : ''}`}
+    >
+      <Eye size={9} />
+      <span>Client viewed {ago}</span>
+      {viewCount > 1 && <span className="opacity-60">· {viewCount}×</span>}
+    </div>
   );
 }
 

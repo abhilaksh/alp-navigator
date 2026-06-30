@@ -1,0 +1,2 @@
+ALTER TABLE `trips` ADD COLUMN IF NOT EXISTS `first_viewed_at` bigint DEFAULT NULL;
+ALTER TABLE `trips` ADD COLUMN IF NOT EXISTS `view_count` int NOT NULL DEFAULT 0;

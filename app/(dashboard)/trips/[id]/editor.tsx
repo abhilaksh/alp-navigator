@@ -734,6 +734,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         fxBufferPct={fxBufferPct}
         fxUsdToInr={fxUsdToInr}
         onFxSave={handleFxSave}
+        firstViewedAt={(initialTrip as { firstViewedAt?: number | null }).firstViewedAt ?? null}
+        viewCount={(initialTrip as { viewCount?: number | null }).viewCount ?? null}
       />
 
       {/* Tab strip */}
