@@ -18,6 +18,7 @@ export interface PipelineTrip {
   createdAt: Date;
   destinationCount: number | null;
   minHoldExpiry: string | null;
+  firstViewedAt: number | null;
 }
 
 const STATUSES = ['draft', 'sent', 'accepted', 'booked'] as const;
@@ -57,9 +58,23 @@ function holdUrgency(holdDate: string | null): null | 'warning' | 'critical' {
   return null;
 }
 
-function isStaleSent(trip: PipelineTrip): boolean {
-  if (trip.status !== 'sent') return false;
-  return Date.now() - new Date(trip.updatedAt).getTime() > 7 * 24 * 60 * 60 * 1000;
+function followUpState(trip: PipelineTrip): null | 'amber' | 'red' | 'cold' {
+  if (trip.status !== 'sent') return null;
+  const msSinceSent = Date.now() - new Date(trip.updatedAt).getTime();
+  if (trip.firstViewedAt == null) {
+    if (msSinceSent > 5 * 24 * 3600000) return 'red';
+    if (msSinceSent > 48 * 3600000) return 'amber';
+  } else {
+    // Client has viewed but not accepted for > 7 days
+    if (msSinceSent > 7 * 24 * 3600000) return 'cold';
+  }
+  return null;
+}
+
+function sentAgo(trip: PipelineTrip): string {
+  const days = Math.floor((Date.now() - new Date(trip.updatedAt).getTime()) / 86400000);
+  if (days < 1) return '<1d';
+  return `${days}d`;
 }
 
 function holdLabel(holdDate: string): string {
@@ -75,7 +90,8 @@ function holdLabel(holdDate: string): string {
 function TripCard({ trip, compact = false }: { trip: PipelineTrip; compact?: boolean }) {
   const meta = STATUS_META[trip.status as Status] ?? STATUS_META.draft;
   const holdUrg = holdUrgency(trip.minHoldExpiry);
-  const staleSent = isStaleSent(trip);
+  const followUp = followUpState(trip);
+  const hasBadges = holdUrg || followUp;
 
   return (
     <Link
@@ -138,7 +154,7 @@ function TripCard({ trip, compact = false }: { trip: PipelineTrip; compact?: boo
         </div>
 
         {/* Alert chips */}
-        {(holdUrg || staleSent) && (
+        {hasBadges && (
           <div className="flex gap-1.5 mt-2 flex-wrap">
             {holdUrg === 'critical' && trip.minHoldExpiry && (
               <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }}>
@@ -150,7 +166,17 @@ function TripCard({ trip, compact = false }: { trip: PipelineTrip; compact?: boo
                 <Clock size={9} /> {holdLabel(trip.minHoldExpiry)}
               </span>
             )}
-            {staleSent && (
+            {followUp === 'red' && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }}>
+                <AlertTriangle size={9} /> No view · {sentAgo(trip)} — follow up
+              </span>
+            )}
+            {followUp === 'amber' && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.09)', color: '#b45309', border: '1px solid rgba(217,119,6,0.22)' }}>
+                <AlertTriangle size={9} /> No view · {sentAgo(trip)}
+              </span>
+            )}
+            {followUp === 'cold' && (
               <span className="inline-flex items-center gap-1 text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.07)', color: '#92400e', border: '1px solid rgba(217,119,6,0.18)' }}>
                 <AlertTriangle size={9} /> Proposal going cold
               </span>
@@ -252,11 +278,12 @@ function KanbanBoard({ trips }: { trips: PipelineTrip[] }) {
 function AlertRail({ trips }: { trips: PipelineTrip[] }) {
   const urgent = trips.filter(t => {
     const holdUrg = holdUrgency(t.minHoldExpiry);
-    return holdUrg === 'critical' || isStaleSent(t);
+    const fu = followUpState(t);
+    return holdUrg === 'critical' || fu === 'red' || fu === 'cold';
   });
   const warning = trips.filter(t => {
-    return holdUrgency(t.minHoldExpiry) === 'warning' && !isStaleSent(t);
-  });
+    return holdUrgency(t.minHoldExpiry) === 'warning' || followUpState(t) === 'amber';
+  }).filter(t => !urgent.includes(t));
 
   if (urgent.length === 0 && warning.length === 0) return null;
 
@@ -288,7 +315,17 @@ function AlertRail({ trips }: { trips: PipelineTrip[] }) {
                   {holdLabel(t.minHoldExpiry)}
                 </span>
               )}
-              {isStaleSent(t) && (
+              {followUpState(t) === 'red' && (
+                <span className="text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }}>
+                  No view · {sentAgo(t)} — follow up
+                </span>
+              )}
+              {followUpState(t) === 'amber' && (
+                <span className="text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.09)', color: '#b45309', border: '1px solid rgba(217,119,6,0.22)' }}>
+                  Sent {sentAgo(t)} — no view yet
+                </span>
+              )}
+              {followUpState(t) === 'cold' && (
                 <span className="text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.07)', color: '#92400e', border: '1px solid rgba(217,119,6,0.18)' }}>
                   Sent {relativeDate(t.updatedAt)} — follow up
                 </span>

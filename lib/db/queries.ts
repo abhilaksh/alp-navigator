@@ -150,6 +150,7 @@ export async function getTripsWithDetailsForUser() {
       updatedAt: trips.updatedAt,
       createdAt: trips.createdAt,
       destinationCount: destCountSq.cnt,
+      firstViewedAt: trips.firstViewedAt,
     })
     .from(trips)
     .leftJoin(clients, eq(trips.clientId, clients.id))

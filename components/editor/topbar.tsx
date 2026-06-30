@@ -45,6 +45,7 @@ interface TopbarProps {
   intakeStatus?: IntakeStatus | null;
   onIntakeStatusChange?: (s: IntakeStatus) => void;
   createdAt?: Date | null;
+  followUpWarning?: 'amber' | 'red' | null;
 }
 
 export function Topbar({
@@ -58,6 +59,7 @@ export function Topbar({
   fxDate, fxSource, fxBufferPct, fxUsdToInr, onFxSave,
   firstViewedAt, viewCount,
   intakeStatus, onIntakeStatusChange, createdAt,
+  followUpWarning,
 }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showIntakeDropdown, setShowIntakeDropdown] = useState(false);
@@ -247,6 +249,9 @@ export function Topbar({
         {firstViewedAt && (
           <ViewBadge firstViewedAt={firstViewedAt} viewCount={viewCount ?? 0} />
         )}
+        {followUpWarning && !firstViewedAt && (
+          <FollowUpChip level={followUpWarning} />
+        )}
         <SaveIndicator status={saveStatus} />
 
         {/* Intake status pill */}
@@ -360,6 +365,24 @@ export function Topbar({
         </button>
       </div>
     </header>
+  );
+}
+
+function FollowUpChip({ level }: { level: 'amber' | 'red' }) {
+  const isRed = level === 'red';
+  return (
+    <div
+      className="flex items-center gap-[5px] font-mono text-[9px] px-[7px] py-[3px] rounded-[3px]"
+      style={{
+        background: isRed ? 'rgba(220,38,38,0.13)' : 'rgba(217,119,6,0.12)',
+        color: isRed ? '#ef4444' : '#d97706',
+        border: `1px solid ${isRed ? 'rgba(220,38,38,0.3)' : 'rgba(217,119,6,0.28)'}`,
+      }}
+      title="Client has not viewed this proposal yet"
+    >
+      <Eye size={9} />
+      <span>{isRed ? 'No view · follow up' : 'Not yet viewed'}</span>
+    </div>
   );
 }
 

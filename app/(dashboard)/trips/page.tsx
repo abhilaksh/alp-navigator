@@ -12,6 +12,7 @@ export default async function TripsPage() {
     ...t,
     destinationCount: t.destinationCount ?? null,
     minHoldExpiry: holdMap.get(t.id) ?? null,
+    firstViewedAt: (t.firstViewedAt as number | null) ?? null,
   }));
 
   return (

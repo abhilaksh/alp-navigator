@@ -789,6 +789,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         intakeStatus={intakeStatus}
         onIntakeStatusChange={handleIntakeStatusChange}
         createdAt={initialTrip.createdAt}
+        followUpWarning={(() => {
+          if (status !== 'sent') return null;
+          const fv = (initialTrip as { firstViewedAt?: number | null }).firstViewedAt;
+          if (fv != null) return null;
+          const msSinceSent = Date.now() - new Date(initialTrip.updatedAt).getTime();
+          if (msSinceSent > 5 * 24 * 3600000) return 'red';
+          if (msSinceSent > 48 * 3600000) return 'amber';
+          return null;
+        })()}
       />
 
       {/* Tab strip */}
