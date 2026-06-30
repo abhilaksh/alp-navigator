@@ -11,6 +11,7 @@ import {
   hotelDetails,
   rates,
   clients,
+  advisorProfiles,
 } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
@@ -251,6 +252,17 @@ export async function getTripWithDetailsByPreviewKey(key: string) {
   if (trip.previewExpiresAt && trip.previewExpiresAt < now) return 'expired';
 
   return trip;
+}
+
+// ─── Advisor Profile ──────────────────────────────────────────────────────────
+
+export async function getAdvisorProfileByTeamId(teamId: number) {
+  const [profile] = await db
+    .select()
+    .from(advisorProfiles)
+    .where(eq(advisorProfiles.teamId, teamId))
+    .limit(1);
+  return profile ?? null;
 }
 
 // ─── Clients ──────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { getTripWithDetailsByPreviewKey } from '@/lib/db/queries';
+import { getTripWithDetailsByPreviewKey, getAdvisorProfileByTeamId } from '@/lib/db/queries';
 import { getUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
 import { calcPerkValue, formatPerkValue } from '@/lib/perk-value';
@@ -32,6 +32,14 @@ export default async function PreviewPage({ params }: Props) {
 
   if (!trip) return notFound();
 
+  // Load advisor profile for this trip's team
+  const advisorProfile = (trip !== 'expired' && (trip as { teamId?: number }).teamId)
+    ? await getAdvisorProfileByTeamId((trip as { teamId: number }).teamId)
+    : null;
+
+  const waNumber = advisorProfile?.whatsappNumber?.replace(/\D/g, '') ?? '919870400235';
+  const waBase = `https://wa.me/${waNumber}`;
+
   if (trip === 'expired') {
     return (
       <div className="min-h-screen bg-paper flex items-center justify-center px-6" style={{ fontFamily: 'Schibsted Grotesk, sans-serif' }}>
@@ -42,7 +50,7 @@ export default async function PreviewPage({ params }: Props) {
             Quotes are valid for 30 days. Contact your advisor for a refreshed version.
           </p>
           <a
-            href="https://wa.me/919870400235"
+            href={waBase}
             target="_blank" rel="noopener noreferrer"
             className="inline-block mt-8 px-6 py-2.5 bg-spruce text-white text-sm rounded-sm hover:opacity-90 transition-opacity"
             style={{ fontFamily: 'Schibsted Grotesk, sans-serif' }}
@@ -120,7 +128,7 @@ export default async function PreviewPage({ params }: Props) {
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="font-display italic text-spruce text-xl tracking-tight" style={{ fontFamily: 'Fraunces, Georgia, serif', color: '#1E3A2F' }}>alp</span>
           <a
-            href="https://wa.me/919870400235"
+            href={waBase}
             target="_blank" rel="noopener noreferrer"
             className="text-[12px] transition-colors"
             style={{ color: '#4A514B' }}
@@ -508,7 +516,7 @@ export default async function PreviewPage({ params }: Props) {
             )}
           </div>
           <a
-            href={`https://wa.me/919870400235?text=${encodeURIComponent(`Hi, I'd like to confirm the itinerary for ${trip.label}.`)}`}
+            href={`${waBase}?text=${encodeURIComponent(`Hi, I'd like to confirm the itinerary for ${trip.label}.`)}`}
             target="_blank" rel="noopener noreferrer"
             className="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-medium text-white rounded-sm transition-opacity hover:opacity-90"
             style={{ background: '#1E3A2F' }}
@@ -523,9 +531,15 @@ export default async function PreviewPage({ params }: Props) {
         className="py-8 text-center text-[11px]"
         style={{ borderTop: '1px solid rgba(22,26,23,0.07)', color: '#8A9189' }}
       >
-        Prepared by <span style={{ color: '#4A514B' }}>Alp Travel Co.</span>
-        {' '}· Fora Pro Advisor · IATA #33520476
-        {' '}· Affiliated with Virtuoso
+        {advisorProfile?.quoteFooter ? (
+          advisorProfile.quoteFooter
+        ) : (
+          <>
+            Prepared by <span style={{ color: '#4A514B' }}>{advisorProfile?.agencyName ?? 'Alp Travel Co.'}</span>
+            {advisorProfile?.iataNumber ? <>{' '}· IATA #{advisorProfile.iataNumber}</> : <>{' '}· IATA #33520476</>}
+            {advisorProfile?.virtuosoMembership ? <>{' '}· Virtuoso</> : <>{' '}· Affiliated with Virtuoso</>}
+          </>
+        )}
       </footer>
     </div>
   );
