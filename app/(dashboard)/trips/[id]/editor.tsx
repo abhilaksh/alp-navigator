@@ -10,6 +10,7 @@ import type { ParsedRate } from '@/lib/db/schema';
 import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
 import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, isHotelItem } from './editor-utils';
 import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
+import { BookingsPanel } from '@/components/editor/bookings-panel';
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
-  const [activeView, setActiveView]   = useState<'editor' | 'itinerary'>('editor');
+  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings'>('editor');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -253,7 +254,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       const newItem: HotelItemState = {
         id: data.item.id, type: 'hotel', title: hotel.name,
         bookingStatus: 'researching', sortOrder: hotelItems.length,
-        cancellationFreeUntil: null, visaRequired: 0, specialRequests: null,
+        bookingRef: null, cancellationFreeUntil: null, visaRequired: 0, specialRequests: null,
         hotelDetails: {
           id: data.hotelDetail.id, itemId: data.item.id,
           stars: hotel.stars, rating: hotel.rating, locationScore: null,
@@ -279,7 +280,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       const newItem: HotelItemState = {
         id: data.item.id, type: 'hotel', title: 'New hotel',
         bookingStatus: 'researching', sortOrder: hotelItems.length,
-        cancellationFreeUntil: null, visaRequired: 0, specialRequests: null,
+        bookingRef: null, cancellationFreeUntil: null, visaRequired: 0, specialRequests: null,
         hotelDetails: {
           id: data.hotelDetail.id, itemId: data.item.id,
           stars: null, rating: null, locationScore: null,
@@ -399,6 +400,30 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       items: d.items.map(i => i.id !== itemId ? i : { ...i, specialRequests: json }),
     })));
     // PATCH is already fired inside SpecialRequestsPanel; this just syncs local state
+  }
+
+  async function handleBookingStatusChange(itemId: number, newStatus: string) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => i.id !== itemId ? i : { ...i, bookingStatus: newStatus }),
+    })));
+    await fetch(`/api/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingStatus: newStatus }),
+    }).catch(() => {});
+  }
+
+  async function handleBookingRefChange(itemId: number, ref: string) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => i.id !== itemId ? i : { ...i, bookingRef: ref }),
+    })));
+    await fetch(`/api/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingRef: ref }),
+    }).catch(() => {});
   }
 
   // ─── Rate mutations ──────────────────────────────────────────────────────────
@@ -649,6 +674,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
           )}
         </button>
+
+        {/* Bookings tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'bookings' ? 'editor' : 'bookings')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'bookings' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'bookings' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Bookings
+          {activeView === 'bookings' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
       </nav>
 
       {/* Main editor body */}
@@ -657,6 +698,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         {/* Itinerary view */}
         {activeView === 'itinerary' && (
           <ItineraryBuilder tripId={id} destinations={destinations} />
+        )}
+
+        {/* Bookings view */}
+        {activeView === 'bookings' && (
+          <BookingsPanel
+            destinations={destinations}
+            onStatusChange={handleBookingStatusChange}
+            onBookingRefChange={handleBookingRefChange}
+          />
         )}
 
         {/* Editor view */}
@@ -809,6 +859,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                         onCancellationFreeUntilChange={handleCancellationFreeUntilChange}
                         onVisaRequiredChange={handleVisaRequiredChange}
                         onSpecialRequestsChange={handleSpecialRequestsChange}
+                        onBookingStatusChange={handleBookingStatusChange}
+                        onBookingRefChange={handleBookingRefChange}
                       />
                     );
                   }

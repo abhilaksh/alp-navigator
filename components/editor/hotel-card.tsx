@@ -38,6 +38,7 @@ export interface HotelItemState {
   type: string;
   title: string;
   bookingStatus: string;
+  bookingRef: string | null;
   sortOrder: number;
   cancellationFreeUntil: string | null;
   visaRequired: number;
@@ -65,6 +66,8 @@ interface HotelCardProps {
   onCancellationFreeUntilChange: (itemId: number, date: string | null) => void;
   onVisaRequiredChange: (itemId: number, value: number) => void;
   onSpecialRequestsChange: (itemId: number, json: string) => void;
+  onBookingStatusChange: (itemId: number, status: string) => void;
+  onBookingRefChange: (itemId: number, ref: string) => void;
 }
 
 function renderStars(n: number | null) {
@@ -72,11 +75,22 @@ function renderStars(n: number | null) {
   return '★'.repeat(Math.min(n, 5));
 }
 
+const BOOKING_STATUSES = ['researching', 'quoted', 'confirmed', 'cancelled'] as const;
+type BookingStatus = typeof BOOKING_STATUSES[number];
+
+const BOOKING_BADGE: Record<BookingStatus, { color: string; bg: string }> = {
+  researching: { color: '#8A9189', bg: 'rgba(22,26,23,0.06)' },
+  quoted:      { color: '#A98B52', bg: 'rgba(169,139,82,0.1)' },
+  confirmed:   { color: '#1E3A2F', bg: 'rgba(30,58,47,0.1)' },
+  cancelled:   { color: '#8A9189', bg: 'rgba(22,26,23,0.04)' },
+};
+
 export function HotelCard({
   item, index,
   onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
   onHoldExpiryChange, onCancellationFreeUntilChange, onVisaRequiredChange, onSpecialRequestsChange,
+  onBookingStatusChange, onBookingRefChange,
 }: HotelCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingRemove, setPendingRemove] = useState(false);
@@ -207,6 +221,26 @@ export function HotelCard({
             </span>
           )}
 
+          {/* Booking status chip */}
+          {item.bookingStatus !== 'researching' && (
+            <button
+              onClick={() => {
+                const idx = BOOKING_STATUSES.indexOf(item.bookingStatus as BookingStatus);
+                const next = BOOKING_STATUSES[(idx + 1) % BOOKING_STATUSES.length];
+                onBookingStatusChange(item.id, next);
+              }}
+              className="font-mono text-[9px] uppercase tracking-[0.06em] px-[6px] py-[2px] rounded-[2px] cursor-pointer flex-shrink-0 transition-opacity hover:opacity-70"
+              style={{
+                background: BOOKING_BADGE[(item.bookingStatus as BookingStatus) ?? 'researching'].bg,
+                color: BOOKING_BADGE[(item.bookingStatus as BookingStatus) ?? 'researching'].color,
+                border: 'none',
+              }}
+              title="Click to advance booking status"
+            >
+              {item.bookingStatus}
+            </button>
+          )}
+
           {/* Fora program + award badges */}
           {detail?.foraPartner?.programs.includes('Fora Reserve') && (
             <span className="font-sans text-[9px] font-semibold tracking-[0.06em] uppercase flex-shrink-0 px-[5px] py-[2px] rounded-[2px]"
@@ -332,7 +366,7 @@ export function HotelCard({
                 </div>
               )}
 
-              {/* Cancellation free until + visa required */}
+              {/* Cancellation free until + visa required + booking status */}
               <div className="flex gap-[18px] flex-wrap">
                 <div>
                   <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[3px]">Cancel free until</div>
@@ -344,6 +378,42 @@ export function HotelCard({
                     style={{ borderBottom: '1px solid transparent', colorScheme: 'light' }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
                     onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                  />
+                </div>
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[3px]">Booking status</div>
+                  <div className="flex gap-[5px]">
+                    {BOOKING_STATUSES.map(s => (
+                      <button
+                        key={s}
+                        onClick={() => onBookingStatusChange(item.id, s)}
+                        className="font-mono text-[8px] uppercase tracking-[0.05em] px-[5px] py-[2px] rounded-[2px] cursor-pointer transition-opacity"
+                        style={{
+                          background: item.bookingStatus === s ? BOOKING_BADGE[s].bg : 'rgba(22,26,23,0.04)',
+                          color: item.bookingStatus === s ? BOOKING_BADGE[s].color : '#8A9189',
+                          border: `1px solid ${item.bookingStatus === s ? BOOKING_BADGE[s].color + '40' : 'transparent'}`,
+                          fontWeight: item.bookingStatus === s ? 600 : 400,
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[3px]">Booking ref</div>
+                  <input
+                    type="text"
+                    defaultValue={item.bookingRef ?? ''}
+                    onBlur={e => {
+                      e.currentTarget.style.borderBottomColor = 'transparent';
+                      const val = e.currentTarget.value.trim();
+                      if (val !== (item.bookingRef ?? '')) onBookingRefChange(item.id, val);
+                    }}
+                    placeholder="—"
+                    className="font-mono text-[12px] text-ink-soft bg-transparent border-none outline-none p-0 transition-colors w-[100px]"
+                    style={{ borderBottom: '1px solid transparent' }}
+                    onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
                   />
                 </div>
                 <div className="flex items-center gap-[6px]">
