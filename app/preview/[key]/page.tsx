@@ -83,17 +83,24 @@ export default async function PreviewPage({ params }: Props) {
 
   let totalFromInr = 0;
   let hasPricing = false;
+  let hasEstimated = false;
   for (const dest of destinations) {
     for (const item of dest.items ?? []) {
-      if (item.type !== 'hotel') continue;
-      const rates = item.hotelDetails?.rates ?? [];
-      if (!rates.length) continue;
-      const cheapest = rates.reduce((min, r) => {
-        const parsed = r.parsedData ? (JSON.parse(r.parsedData) as { total_inr?: number }) : null;
-        const amt = parsed?.total_inr ?? 0;
-        return amt > 0 && amt < min ? amt : min;
-      }, Infinity);
-      if (cheapest < Infinity) { totalFromInr += cheapest; hasPricing = true; }
+      if (item.type === 'hotel') {
+        const itemRates = item.hotelDetails?.rates ?? [];
+        if (!itemRates.length) continue;
+        const cheapest = itemRates.reduce((min, r) => {
+          const parsed = r.parsedData ? (JSON.parse(r.parsedData) as { total_inr?: number }) : null;
+          const amt = parsed?.total_inr ?? 0;
+          return amt > 0 && amt < min ? amt : min;
+        }, Infinity);
+        if (cheapest < Infinity) { totalFromInr += cheapest; hasPricing = true; }
+      } else if (item.confirmedTotalInr && item.confirmedTotalInr > 0) {
+        totalFromInr += item.confirmedTotalInr;
+        hasPricing = true;
+        const dj = item.detailsJson ? (typeof item.detailsJson === 'string' ? JSON.parse(item.detailsJson as string) : item.detailsJson) as { isEstimated?: boolean } : null;
+        if (dj?.isEstimated) hasEstimated = true;
+      }
     }
   }
 
@@ -184,10 +191,10 @@ export default async function PreviewPage({ params }: Props) {
           {hasPricing && (
             <div className="mt-8 pt-6" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
               <p className="text-[10px] uppercase tracking-[0.12em] mb-1" style={{ color: 'rgba(169,139,82,0.65)' }}>
-                Accommodation from
+                {hasEstimated ? 'Total from (estimated)' : 'Total from'}
               </p>
               <p className="font-mono text-2xl" style={{ color: '#A98B52', fontFamily: 'Spline Sans Mono, monospace' }}>
-                ₹{totalFromInr.toLocaleString('en-IN')}
+                {hasEstimated ? '~' : ''}₹{totalFromInr.toLocaleString('en-IN')}
               </p>
             </div>
           )}
@@ -544,6 +551,50 @@ export default async function PreviewPage({ params }: Props) {
                   Hotels to be confirmed.
                 </p>
               )}
+
+              {/* Non-hotel line items: flights, transfers, activities */}
+              {(() => {
+                const lineItems = (dest.items ?? []).filter(i => i.type !== 'hotel' && i.confirmedTotalInr);
+                if (!lineItems.length) return null;
+                return (
+                  <div className="ml-[36px] mt-8 space-y-3">
+                    <p className="text-[9px] uppercase tracking-[0.12em] mb-2" style={{ color: '#8A9189' }}>
+                      Additional inclusions
+                    </p>
+                    {lineItems.map(item => {
+                      const dj = item.detailsJson
+                        ? (typeof item.detailsJson === 'string' ? JSON.parse(item.detailsJson as string) : item.detailsJson) as LineItemDetails
+                        : null;
+                      const isEst = dj?.isEstimated ?? false;
+                      const icon = item.type === 'flight' ? '✈' : item.type === 'transfer' ? '→' : '◇';
+                      const summary = buildLineItemSummary(item.type, dj);
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-start justify-between gap-4 py-2.5 px-3 rounded-[3px]"
+                          style={{ background: 'rgba(22,26,23,0.04)', border: '1px solid rgba(22,26,23,0.07)' }}
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <span className="text-[12px] flex-shrink-0 mt-[1px]" style={{ color: '#8A9189' }}>{icon}</span>
+                            <div className="min-w-0">
+                              <p className="text-[13px] text-ink leading-snug truncate">{item.title}</p>
+                              {summary && <p className="text-[11px] mt-[2px]" style={{ color: '#8A9189' }}>{summary}</p>}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="font-mono text-[13px]" style={{ color: '#A98B52' }}>
+                              {isEst ? '~' : ''}₹{item.confirmedTotalInr!.toLocaleString('en-IN')}
+                            </p>
+                            {isEst && (
+                              <p className="text-[9px] mt-[1px]" style={{ color: '#8A9189' }}>estimated</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </section>
           );
         })}
@@ -615,6 +666,40 @@ export default async function PreviewPage({ params }: Props) {
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface LineItemDetails {
+  isEstimated?: boolean;
+  // flight
+  airline?: string; from?: string; to?: string; cabinClass?: string;
+  departureDateTime?: string; flightNumber?: string; passengers?: number | string;
+  // transfer
+  pickupLocation?: string; dropoffLocation?: string; vehicleType?: string; dateTime?: string;
+  // activity
+  activityName?: string; operator?: string;
+}
+
+function buildLineItemSummary(type: string, dj: LineItemDetails | null): string {
+  if (!dj) return '';
+  if (type === 'flight') {
+    const parts: string[] = [];
+    if (dj.from && dj.to) parts.push(`${dj.from} → ${dj.to}`);
+    if (dj.cabinClass) parts.push(dj.cabinClass.charAt(0).toUpperCase() + dj.cabinClass.slice(1));
+    if (dj.departureDateTime) parts.push(fmtDateShort(dj.departureDateTime.split('T')[0]));
+    return parts.join(' · ');
+  }
+  if (type === 'transfer') {
+    const parts: string[] = [];
+    if (dj.pickupLocation || dj.dropoffLocation) parts.push(`${dj.pickupLocation ?? '?'} → ${dj.dropoffLocation ?? '?'}`);
+    if (dj.vehicleType) parts.push(dj.vehicleType);
+    return parts.join(' · ');
+  }
+  if (type === 'activity' || type === 'experience') {
+    const parts: string[] = [];
+    if (dj.operator) parts.push(dj.operator);
+    return parts.join(' · ');
+  }
+  return '';
+}
 
 interface ParsedRate {
   room_type?: string;
