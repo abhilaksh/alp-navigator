@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { List, LayoutGrid, AlertTriangle, Clock, Copy } from 'lucide-react';
+import { List, LayoutGrid, AlertTriangle, Clock, Copy, Archive } from 'lucide-react';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -95,6 +95,7 @@ function TripCard({ trip, compact = false }: { trip: PipelineTrip; compact?: boo
   const hasBadges = holdUrg || followUp;
   const router = useRouter();
   const [duplicating, setDuplicating] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   const handleDuplicate = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -108,6 +109,23 @@ function TripCard({ trip, compact = false }: { trip: PipelineTrip; compact?: boo
       setDuplicating(false);
     }
   }, [trip.id, router]);
+
+  const handleArchive = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Archive "${trip.label}"? It will be hidden from the pipeline.`)) return;
+    setArchiving(true);
+    try {
+      await fetch(`/api/trips/${trip.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'archived' }),
+      });
+      router.refresh();
+    } finally {
+      setArchiving(false);
+    }
+  }, [trip.id, trip.label, router]);
 
   return (
     <div
@@ -130,22 +148,34 @@ function TripCard({ trip, compact = false }: { trip: PipelineTrip; compact?: boo
         el.style.transform = '';
       }}
     >
-      {/* Duplicate button — shown on hover */}
-      <button
-        onClick={handleDuplicate}
-        disabled={duplicating}
-        title="Duplicate trip"
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 rounded-[3px] text-[10px] font-sans z-10"
-        style={{ background: 'rgba(22,26,23,0.07)', color: '#4A514B', cursor: duplicating ? 'not-allowed' : 'pointer' }}
-      >
-        <Copy size={10} />
-        {duplicating ? '…' : 'Copy'}
-      </button>
+      {/* Duplicate + Archive buttons — shown on hover */}
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button
+          onClick={handleDuplicate}
+          disabled={duplicating}
+          title="Duplicate trip"
+          className="flex items-center gap-1 px-2 py-1 rounded-[3px] text-[10px] font-sans"
+          style={{ background: 'rgba(22,26,23,0.07)', color: '#4A514B', cursor: duplicating ? 'not-allowed' : 'pointer' }}
+        >
+          <Copy size={10} />
+          {duplicating ? '…' : 'Copy'}
+        </button>
+        <button
+          onClick={handleArchive}
+          disabled={archiving}
+          title="Archive trip"
+          className="flex items-center gap-1 px-2 py-1 rounded-[3px] text-[10px] font-sans"
+          style={{ background: 'rgba(22,26,23,0.07)', color: '#4A514B', cursor: archiving ? 'not-allowed' : 'pointer' }}
+        >
+          <Archive size={10} />
+          {archiving ? '…' : 'Archive'}
+        </button>
+      </div>
 
       <Link href={`/trips/${trip.id}`} className="block">
         <div className={compact ? 'px-3 py-2.5' : 'px-4 py-3.5'}>
           {/* Name row */}
-          <div className="flex items-start justify-between gap-2 mb-1 pr-14">
+          <div className="flex items-start justify-between gap-2 mb-1 pr-24">
             <span className={`font-display text-ink leading-snug group-hover:text-spruce transition-colors ${compact ? 'text-[13px]' : 'text-[15px]'}`}>
               {trip.label}
             </span>
@@ -380,29 +410,66 @@ const STATUS_TABS = [
 interface PipelineViewProps {
   trips: PipelineTrip[];
   commissionSummary?: { expected: number; received: number; pending: number; count: number };
+  showingArchived?: boolean;
 }
 
-export function PipelineView({ trips, commissionSummary }: PipelineViewProps) {
+export function PipelineView({ trips, commissionSummary, showingArchived = false }: PipelineViewProps) {
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [activeStatus, setActiveStatus] = useState<string>('all');
+  const [search, setSearch] = useState('');
+
+  const filteredTrips = useMemo(() => {
+    if (!search.trim()) return trips;
+    const q = search.toLowerCase();
+    return trips.filter(t =>
+      t.label.toLowerCase().includes(q) ||
+      (t.clientName ?? '').toLowerCase().includes(q)
+    );
+  }, [trips, search]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: trips.length };
-    for (const t of trips) {
+    const c: Record<string, number> = { all: filteredTrips.length };
+    for (const t of filteredTrips) {
       c[t.status] = (c[t.status] ?? 0) + 1;
     }
     return c;
-  }, [trips]);
+  }, [filteredTrips]);
 
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="font-display text-[28px] text-ink tracking-tight leading-none">Pipeline</h1>
-          <p className="text-[12px] text-ink-mute font-sans mt-1">{trips.length} active trip{trips.length !== 1 ? 's' : ''}</p>
+          <h1 className="font-display text-[28px] text-ink tracking-tight leading-none">
+            {showingArchived ? 'Archived' : 'Pipeline'}
+          </h1>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-[12px] text-ink-mute font-sans">
+              {trips.length} {showingArchived ? 'archived' : 'active'} trip{trips.length !== 1 ? 's' : ''}
+            </p>
+            {showingArchived ? (
+              <a href="/trips" className="text-[11px] text-brass hover:underline font-sans">← Back to pipeline</a>
+            ) : (
+              <a href="/trips?archived=1" className="text-[11px] text-ink-mute hover:text-ink font-sans transition-colors">View archived →</a>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Search */}
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search trips…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-44 pl-3 pr-3 py-[6px] text-[12px] font-sans rounded-[4px] outline-none transition-colors"
+              style={{
+                border: '1px solid #C9D2CC',
+                background: search ? 'white' : 'transparent',
+                color: '#161A17',
+              }}
+            />
+          </div>
           {/* View toggle */}
           <div className="flex rounded-[4px] overflow-hidden" style={{ border: '1px solid #C9D2CC' }}>
             {(['list', 'kanban'] as const).map(v => (
@@ -454,7 +521,7 @@ export function PipelineView({ trips, commissionSummary }: PipelineViewProps) {
       </div>
 
       {/* Alert rail */}
-      <AlertRail trips={trips} />
+      <AlertRail trips={filteredTrips} />
 
       {/* Commission summary — only shown when data exists */}
       {commissionSummary && commissionSummary.count > 0 && (
@@ -506,9 +573,9 @@ export function PipelineView({ trips, commissionSummary }: PipelineViewProps) {
 
       {/* Content */}
       {view === 'list' ? (
-        <ListView trips={trips} activeStatus={activeStatus} />
+        <ListView trips={filteredTrips} activeStatus={activeStatus} />
       ) : (
-        <KanbanBoard trips={trips} />
+        <KanbanBoard trips={filteredTrips} />
       )}
     </div>
   );

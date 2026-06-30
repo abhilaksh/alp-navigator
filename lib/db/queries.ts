@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, count, min, isNotNull } from 'drizzle-orm';
+import { desc, and, eq, isNull, count, min, isNotNull, ne } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
   activityLogs,
@@ -126,7 +126,7 @@ export async function getTripsForUser() {
     .orderBy(desc(trips.updatedAt));
 }
 
-export async function getTripsWithDetailsForUser() {
+export async function getTripsWithDetailsForUser(includeArchived = false) {
   const user = await getUser();
   if (!user) return [];
 
@@ -156,7 +156,10 @@ export async function getTripsWithDetailsForUser() {
     .from(trips)
     .leftJoin(clients, eq(trips.clientId, clients.id))
     .leftJoin(destCountSq, eq(trips.id, destCountSq.tripId))
-    .where(eq(trips.userId, user.id))
+    .where(and(
+      eq(trips.userId, user.id),
+      includeArchived ? undefined : ne(trips.status, 'archived'),
+    ))
     .orderBy(desc(trips.updatedAt));
 }
 
