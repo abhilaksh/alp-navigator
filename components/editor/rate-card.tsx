@@ -16,6 +16,7 @@ export interface RateState {
   errorMessage: string | null;
   history: string | null;
   sortOrder: number;
+  updatedAt: Date | string | null;
 }
 
 interface RateCardProps {
@@ -52,6 +53,13 @@ export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSel
     ? (() => { try { return JSON.parse(rate.history); } catch { return []; } })()
     : [];
   const effectiveStatus = parsing ? 'parsing' : rate.status;
+
+  const isStale = (() => {
+    if (effectiveStatus !== 'done' || !parsed || !rate.updatedAt) return false;
+    const parsedMs = new Date(rate.updatedAt).getTime();
+    if (isNaN(parsedMs)) return false;
+    return Date.now() - parsedMs > 7 * 24 * 60 * 60 * 1000;
+  })();
 
   async function handleParse() {
     if (!localText.trim() || parsing) return;
@@ -133,6 +141,17 @@ export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSel
         )}
         {!summary && <span className="flex-1" />}
 
+        {/* Stale rate warning */}
+        {isStale && (
+          <span
+            className="font-mono text-[9px] font-medium px-[5px] py-px rounded-sm flex-shrink-0 mr-0.5"
+            title="Rate was parsed more than 7 days ago — verify pricing is still current"
+            style={{ background: 'rgba(217,119,6,0.1)', color: '#b45309', border: '1px solid rgba(217,119,6,0.25)' }}
+          >
+            Stale
+          </span>
+        )}
+
         <button
           onClick={e => { e.stopPropagation(); onRemove(rate.id); }}
           className="p-0.5 flex items-center flex-shrink-0 text-ink-mute hover:text-danger transition-colors opacity-0 group-hover/rate:opacity-100"
@@ -186,6 +205,14 @@ export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSel
 
           {/* Done state */}
           {effectiveStatus === 'done' && parsed && <DoneState parsed={parsed} />}
+
+          {/* Stale rate notice */}
+          {effectiveStatus === 'done' && isStale && (
+            <div className="mx-2.5 mb-2.5 px-2.5 py-1.5 rounded-sm flex items-center gap-1.5 text-[10px] font-sans" style={{ background: 'rgba(217,119,6,0.07)', border: '1px solid rgba(217,119,6,0.2)', color: '#92400e' }}>
+              <span>⚠</span>
+              <span>Rate parsed {Math.floor((Date.now() - new Date(rate.updatedAt!).getTime()) / 86400000)} days ago — confirm pricing is still current</span>
+            </div>
+          )}
 
           {/* Parse history */}
           {effectiveStatus === 'done' && history.length > 0 && (

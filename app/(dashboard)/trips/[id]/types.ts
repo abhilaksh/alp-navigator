@@ -9,6 +9,7 @@ export type RateRow = {
   rawText: string | null; status: string; isConfirmed: number;
   parsedData: string | null; proposals: string | null;
   errorMessage: string | null; history: string | null; sortOrder: number;
+  updatedAt: Date | string | null;
 };
 
 export type VisaInfoState = {

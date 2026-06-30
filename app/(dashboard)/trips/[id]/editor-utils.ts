@@ -28,7 +28,12 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
             lng: i.hotelDetails.lng, googleRateInr: i.hotelDetails.googleRateInr,
             holdExpiresAt: i.hotelDetails.holdExpiresAt ?? null,
             foraPartner: (i.hotelDetails as { foraPartner?: unknown }).foraPartner ?? null,
-            rates: (i.hotelDetails.rates ?? []) as RateRow[],
+            rates: (i.hotelDetails.rates ?? []).map(r => ({
+              ...r,
+              sourceLabel: r.sourceLabel ?? null,
+              history: r.history ?? null,
+              updatedAt: r.updatedAt ?? null,
+            })) as RateRow[],
           } : null,
         } as HotelItemState;
       }
