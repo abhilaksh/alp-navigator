@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import useSWR from 'swr';
 import {
   Plus, Trash2, MapPin, Car, Utensils, Lightbulb,
-  Building2, FileText, Calendar, Map,
+  Building2, FileText, Calendar, Map, Sparkles, MessageCircle, Loader2, Copy, Check,
 } from 'lucide-react';
 import type { DestinationState } from '@/app/(dashboard)/trips/[id]/types';
 import { isHotelItem } from '@/app/(dashboard)/trips/[id]/editor-utils';
@@ -176,6 +176,12 @@ function DayPanel({
   const [titleDraft, setTitleDraft] = useState(day.title ?? '');
   const [dateDraft, setDateDraft] = useState(day.date ?? '');
   const [summaryDraft, setSummaryDraft] = useState(day.summary ?? '');
+  const [generating, setGenerating] = useState(false);
+
+  // Sync local draft when day prop changes (e.g. after mutate)
+  useEffect(() => { setTitleDraft(day.title ?? ''); }, [day.title]);
+  useEffect(() => { setSummaryDraft(day.summary ?? ''); }, [day.summary]);
+  useEffect(() => { setDateDraft(day.date ?? ''); }, [day.date]);
 
   // Hotel items for hotel_ref picker
   const hotelItems = destinations.flatMap(d =>
@@ -183,6 +189,49 @@ function DayPanel({
   );
 
   const [showHotelPicker, setShowHotelPicker] = useState(false);
+
+  const destName = day.destinationId
+    ? destinations.find(d => d.id === day.destinationId)?.name
+    : destinations[0]?.name;
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      // Collect hotel names from hotel_ref blocks
+      const hotelNames = day.blocks
+        .filter(b => b.type === 'hotel_ref' && b.content)
+        .map(b => b.content as string);
+
+      // Collect advisor notes from "Our take" on those hotels
+      const advisorNotes = destinations.flatMap(d => d.items)
+        .filter(i => isHotelItem(i) && (i as { hotelDetails?: { recommendation?: string | null } }).hotelDetails?.recommendation)
+        .map(i => (i as { hotelDetails?: { recommendation?: string | null } }).hotelDetails?.recommendation)
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(' | ');
+
+      const res = await fetch(`/api/itinerary/days/${day.id}/write-narrative`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destinationName: destName,
+          hotelNames,
+          advisorNotes,
+          existingSummary: summaryDraft,
+        }),
+      });
+
+      if (res.ok) {
+        const { narrative } = await res.json();
+        if (narrative) {
+          setSummaryDraft(narrative);
+          onUpdateDay(day.id, { summary: narrative });
+        }
+      }
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#C9D2CC transparent' }}>
@@ -196,10 +245,8 @@ function DayPanel({
                 <span className="text-[10px] font-sans font-semibold uppercase tracking-[0.09em] text-ink-mute">
                   Day {day.dayNumber}
                 </span>
-                {day.destinationId && (
-                  <span className="text-[10px] font-sans text-ink-mute">
-                    · {destinations.find(d => d.id === day.destinationId)?.name ?? ''}
-                  </span>
+                {destName && (
+                  <span className="text-[10px] font-sans text-ink-mute">· {destName}</span>
                 )}
               </div>
               <input
@@ -236,16 +283,31 @@ function DayPanel({
             </div>
           </div>
 
-          {/* Summary */}
-          <textarea
-            value={summaryDraft}
-            onChange={e => setSummaryDraft(e.target.value)}
-            onBlur={() => onUpdateDay(day.id, { summary: summaryDraft || null })}
-            placeholder="Add a brief overview of the day…"
-            className="w-full font-sans text-[13px] text-ink-soft bg-transparent border-none outline-none resize-none leading-relaxed mt-1"
-            style={{ minHeight: 0 }}
-            rows={2}
-          />
+          {/* Summary with AI generate */}
+          <div className="relative group/summary mt-1">
+            <textarea
+              value={summaryDraft}
+              onChange={e => setSummaryDraft(e.target.value)}
+              onBlur={() => onUpdateDay(day.id, { summary: summaryDraft || null })}
+              placeholder="Add a brief overview of the day… or use AI to generate one →"
+              className="w-full font-sans text-[13px] text-ink-soft bg-transparent border-none outline-none resize-none leading-relaxed pr-8"
+              style={{ minHeight: 0 }}
+              rows={2}
+              disabled={generating}
+            />
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              title="Generate narrative with AI"
+              className="absolute right-0 top-0.5 opacity-30 group-hover/summary:opacity-100 transition-opacity cursor-pointer"
+              style={{ background: 'none', border: 'none', padding: 2 }}
+            >
+              {generating
+                ? <Loader2 size={14} style={{ color: '#A98B52' }} className="animate-spin" />
+                : <Sparkles size={14} style={{ color: '#A98B52' }} />
+              }
+            </button>
+          </div>
         </div>
 
         {/* Divider */}
@@ -430,6 +492,28 @@ export function ItineraryBuilder({ tripId, destinations }: ItineraryBuilderProps
     if (refreshed?.length) setActiveDayId(refreshed[0].id);
   }, [tripId, destinations, mutate]);
 
+  const [waSummaryText, setWaSummaryText] = useState<string | null>(null);
+  const [waGenerating, setWaGenerating] = useState(false);
+  const [waCopied, setWaCopied] = useState(false);
+
+  const handleWaSummary = useCallback(async () => {
+    setWaGenerating(true);
+    setWaSummaryText(null);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/itinerary-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const { summary } = await res.json();
+        setWaSummaryText(summary ?? null);
+      }
+    } finally {
+      setWaGenerating(false);
+    }
+  }, [tripId]);
+
   /* ── Block CRUD ─────────────────────────────────── */
 
   const handleAddBlock = useCallback(async (dayId: number, type: BlockTypeKey) => {
@@ -552,6 +636,17 @@ export function ItineraryBuilder({ tripId, destinations }: ItineraryBuilderProps
                 <Calendar size={12} />
               </button>
             )}
+            {sortedDays.length > 0 && (
+              <button
+                onClick={handleWaSummary}
+                disabled={waGenerating}
+                className="text-ink-mute hover:text-brass transition-colors cursor-pointer"
+                style={{ background: 'none', border: 'none', padding: 0 }}
+                title="Generate WhatsApp summary"
+              >
+                {waGenerating ? <Loader2 size={12} className="animate-spin" /> : <MessageCircle size={12} />}
+              </button>
+            )}
             <button
               onClick={handleAddDay}
               className="text-ink-mute hover:text-brass transition-colors cursor-pointer"
@@ -623,6 +718,38 @@ export function ItineraryBuilder({ tripId, destinations }: ItineraryBuilderProps
             </span>
           </button>
         </div>
+
+        {/* WA summary panel */}
+        {waSummaryText && (
+          <div
+            className="px-3 py-3 flex-shrink-0"
+            style={{ borderTop: '1px solid rgba(22,26,23,0.09)', background: 'rgba(22,26,23,0.02)' }}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] font-sans font-semibold uppercase tracking-[0.09em] text-ink-mute">WA Summary</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => { navigator.clipboard.writeText(waSummaryText); setWaCopied(true); setTimeout(() => setWaCopied(false), 2000); }}
+                  className="text-ink-mute hover:text-brass transition-colors cursor-pointer"
+                  style={{ background: 'none', border: 'none', padding: 0 }}
+                  title="Copy to clipboard"
+                >
+                  {waCopied ? <Check size={12} style={{ color: '#2E6B45' }} /> : <Copy size={12} />}
+                </button>
+                <button
+                  onClick={() => setWaSummaryText(null)}
+                  className="text-ink-mute hover:text-danger transition-colors cursor-pointer"
+                  style={{ background: 'none', border: 'none', padding: 0 }}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <pre className="font-sans text-[10px] text-ink-soft whitespace-pre-wrap leading-relaxed" style={{ fontFamily: 'inherit' }}>
+              {waSummaryText}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Right: day editing panel */}
