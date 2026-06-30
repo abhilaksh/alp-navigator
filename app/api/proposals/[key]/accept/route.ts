@@ -5,9 +5,9 @@ import { eq } from 'drizzle-orm';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { key: string } }
+  { params }: { params: Promise<{ key: string }> }
 ) {
-  const { key } = params;
+  const { key } = await params;
   const body = await req.json().catch(() => ({})) as { note?: string };
 
   const trip = await db
