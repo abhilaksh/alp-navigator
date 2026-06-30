@@ -176,6 +176,42 @@ export default async function PreviewPage({ params }: Props) {
 
       {/* ── Body ───────────────────────────────────────────────────────────── */}
       <main className="max-w-3xl mx-auto px-6 py-14 space-y-16">
+
+        {/* Personal note + journey overview */}
+        {((trip as { personalNote?: string | null }).personalNote || (trip as { journeyOverview?: string | null }).journeyOverview) && (
+          <section style={{ borderBottom: '1px solid rgba(22,26,23,0.08)', paddingBottom: 40, marginBottom: 0 }}>
+            {(trip as { personalNote?: string | null }).personalNote && (
+              <div className="mb-8">
+                <p
+                  className="text-[13px] leading-[1.75] italic"
+                  style={{ color: '#4A514B', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+                >
+                  {(trip as { personalNote?: string | null }).personalNote}
+                </p>
+                <p className="mt-2 text-[10px] uppercase tracking-[0.12em]" style={{ color: '#A98B52' }}>
+                  — Abhilaksh, Alp Travel Co.
+                </p>
+              </div>
+            )}
+            {(trip as { journeyOverview?: string | null }).journeyOverview && (
+              <div>
+                <p
+                  className="text-[11px] uppercase tracking-[0.14em] mb-3"
+                  style={{ color: '#A98B52' }}
+                >
+                  The journey
+                </p>
+                <p
+                  className="text-[14px] leading-[1.75]"
+                  style={{ color: '#161A17', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+                >
+                  {(trip as { journeyOverview?: string | null }).journeyOverview}
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
         {destinations.map((dest, di) => {
           const hotels = (dest.items ?? []).filter(i => i.type === 'hotel');
           return (

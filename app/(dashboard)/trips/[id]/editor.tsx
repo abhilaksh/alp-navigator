@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { Plus, MapPin } from 'lucide-react';
+import { Plus, MapPin, Sparkles, Loader2 } from 'lucide-react';
 import { Topbar, type SaveStatus, type WorkflowStatus, type IntakeStatus } from '@/components/editor/topbar';
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
 import { LineItemCard, type LineItemState } from '@/components/editor/line-item-card';
@@ -155,6 +155,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
 
   const [label, setLabel]           = useState(initialTrip.label);
   const [notes, setNotes]           = useState(initialTrip.notes ?? '');
+  const [personalNote, setPersonalNote] = useState((initialTrip as { personalNote?: string | null }).personalNote ?? '');
+  const [journeyOverview, setJourneyOverview] = useState((initialTrip as { journeyOverview?: string | null }).journeyOverview ?? '');
+  const [generatingOverview, setGeneratingOverview] = useState(false);
   const [adults]                    = useState(initialTrip.adults);
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
@@ -248,6 +251,38 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   function handleNotesChange(v: string) {
     setNotes(v);
     scheduleSave({ notes: v });
+  }
+
+  function handlePersonalNoteChange(v: string) {
+    setPersonalNote(v);
+    scheduleSave({ personalNote: v });
+  }
+
+  function handleJourneyOverviewChange(v: string) {
+    setJourneyOverview(v);
+    scheduleSave({ journeyOverview: v });
+  }
+
+  async function handleGenerateOverview() {
+    setGeneratingOverview(true);
+    try {
+      const destNames = destinations.map(d => d.name).join(', ');
+      const hotelList = destinations.flatMap(d => d.items.filter(isHotelItem).map(h => h.title)).join(', ');
+      const res = await fetch(`/api/trips/${id}/generate-overview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinations: destNames, hotels: hotelList || null, clientName }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { text?: string };
+        if (data.text) {
+          setJourneyOverview(data.text.trim());
+          scheduleSave({ journeyOverview: data.text.trim() });
+        }
+      }
+    } finally {
+      setGeneratingOverview(false);
+    }
   }
 
   async function handleFxSave(fx: { fxDate: string; fxSource: string; fxBufferPct: number; fxUsdToInr: number } | null) {
@@ -1073,6 +1108,58 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 1; }}
                 />
               )}
+
+              {/* Proposal sections — personal note + journey overview */}
+              <div className="mb-[18px] rounded-[4px] overflow-hidden" style={{ border: '1px solid rgba(201,210,204,0.7)' }}>
+                <div className="px-3 py-2" style={{ background: '#F6F4EE', borderBottom: '1px solid rgba(201,210,204,0.7)' }}>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute">Proposal copy</p>
+                </div>
+
+                {/* Personal note */}
+                <div className="px-3 pt-2.5 pb-2" style={{ borderBottom: '1px solid rgba(201,210,204,0.5)' }}>
+                  <label className="block font-mono text-[9px] uppercase tracking-[0.08em] mb-[6px]" style={{ color: '#A98B52' }}>
+                    Personal note <span className="normal-case ml-1 opacity-60" style={{ fontFamily: 'inherit' }}>— your words, not AI</span>
+                  </label>
+                  <textarea
+                    value={personalNote}
+                    onChange={e => handlePersonalNoteChange(e.target.value)}
+                    placeholder={`Dear ${clientName ?? 'traveller'}, based on what you shared…`}
+                    rows={2}
+                    className="w-full font-sans text-[12px] text-ink bg-transparent border-none outline-none resize-none leading-relaxed placeholder:text-ink-mute"
+                    style={{ minHeight: 40 }}
+                    onFocus={e => (e.currentTarget.rows = 4)}
+                    onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 2; }}
+                  />
+                </div>
+
+                {/* Journey overview */}
+                <div className="px-3 pt-2.5 pb-3">
+                  <div className="flex items-center justify-between mb-[6px]">
+                    <label className="font-mono text-[9px] uppercase tracking-[0.08em]" style={{ color: '#4A514B' }}>
+                      Journey overview
+                    </label>
+                    <button
+                      onClick={handleGenerateOverview}
+                      disabled={generatingOverview}
+                      className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.06em] px-2 py-[3px] rounded-[2px] cursor-pointer disabled:opacity-40 transition-opacity"
+                      style={{ background: 'rgba(169,139,82,0.08)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.22)' }}
+                    >
+                      {generatingOverview ? <Loader2 size={9} className="spin" /> : <Sparkles size={9} />}
+                      {generatingOverview ? 'Generating…' : 'Generate'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={journeyOverview}
+                    onChange={e => handleJourneyOverviewChange(e.target.value)}
+                    placeholder="The emotional arc of this journey…"
+                    rows={journeyOverview ? undefined : 2}
+                    className="w-full font-sans text-[12px] text-ink bg-transparent border-none outline-none resize-none leading-relaxed placeholder:text-ink-mute"
+                    style={{ minHeight: 40 }}
+                    onFocus={e => (e.currentTarget.rows = 4)}
+                    onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 2; }}
+                  />
+                </div>
+              </div>
 
               {/* Version history */}
               <div className="mb-[18px]">

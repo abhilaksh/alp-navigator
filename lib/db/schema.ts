@@ -95,6 +95,8 @@ export const trips = mysqlTable('trips', {
   previewExpiresAt: bigint('preview_expires_at', { mode: 'number' }),
   totalFromInr: int('total_from_inr'),
   notes: text('notes'),             // internal advisor notes
+  personalNote: text('personal_note'),     // client-facing personal note (advisor-written, top of proposal)
+  journeyOverview: text('journey_overview'), // narrative overview of the trip arc (AI-assisted)
   // Exchange rate lock — documents the USD→INR rate used when building this quote
   fxDate: varchar('fx_date', { length: 10 }),
   fxSource: varchar('fx_source', { length: 50 }),       // 'RBI' | 'Wise' | 'XE' | 'manual'
