@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { getTripWithDetailsByPreviewKey } from '@/lib/db/queries';
+import { getUser } from '@/lib/db/queries';
 import type { Metadata } from 'next';
 
 type Props = { params: Promise<{ key: string }> };
@@ -12,29 +14,34 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
   return {
     title: `${trip.label} — Alp Travel Co.`,
-    description: `Personalised travel proposal from Alp Travel Co.`,
+    description: `A personalised travel proposal from Alp Travel Co.`,
+    robots: { index: false, follow: false },
   };
 }
 
 export default async function PreviewPage({ params }: Props) {
   const { key } = await params;
-  const trip = await getTripWithDetailsByPreviewKey(key);
+  const [trip, advisor] = await Promise.all([
+    getTripWithDetailsByPreviewKey(key),
+    getUser(),
+  ]);
 
   if (!trip) return notFound();
 
   if (trip === 'expired') {
     return (
-      <div className="min-h-screen bg-paper flex items-center justify-center px-6">
+      <div className="min-h-screen bg-paper flex items-center justify-center px-6" style={{ fontFamily: 'Schibsted Grotesk, sans-serif' }}>
         <div className="text-center max-w-sm">
-          <p className="font-display text-2xl text-ink mb-3">Quote expired</p>
-          <p className="text-ink-mute text-sm">
-            This quote link has expired. Contact your advisor for an updated version.
+          <div className="font-display italic text-3xl text-spruce mb-8 tracking-tight">alp</div>
+          <p className="font-display text-2xl text-ink mb-3">This quote has expired.</p>
+          <p className="text-ink-mute text-sm leading-relaxed">
+            Quotes are valid for 30 days. Contact your advisor for a refreshed version.
           </p>
           <a
-            href={`https://wa.me/919870400235`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block mt-6 px-5 py-2.5 bg-spruce text-white text-sm rounded hover:bg-spruce-light transition-colors"
+            href="https://wa.me/919870400235"
+            target="_blank" rel="noopener noreferrer"
+            className="inline-block mt-8 px-6 py-2.5 bg-spruce text-white text-sm rounded-sm hover:opacity-90 transition-opacity"
+            style={{ fontFamily: 'Schibsted Grotesk, sans-serif' }}
           >
             Message on WhatsApp
           </a>
@@ -43,95 +50,139 @@ export default async function PreviewPage({ params }: Props) {
     );
   }
 
-  // Compute totals
+  // ── Compute totals ────────────────────────────────────────────────────────
   const destinations = trip.destinations ?? [];
   const totalNights = destinations.reduce((sum, d) => sum + (d.nights ?? 0), 0);
 
-  // Sum cheapest confirmed/parsed rate per hotel
   let totalFromInr = 0;
   let hasPricing = false;
   for (const dest of destinations) {
     for (const item of dest.items ?? []) {
       if (item.type !== 'hotel') continue;
       const rates = item.hotelDetails?.rates ?? [];
-      if (rates.length === 0) continue;
+      if (!rates.length) continue;
       const cheapest = rates.reduce((min, r) => {
         const parsed = r.parsedData ? (JSON.parse(r.parsedData) as { total_inr?: number }) : null;
         const amt = parsed?.total_inr ?? 0;
         return amt > 0 && amt < min ? amt : min;
       }, Infinity);
-      if (cheapest < Infinity) {
-        totalFromInr += cheapest;
-        hasPricing = true;
-      }
+      if (cheapest < Infinity) { totalFromInr += cheapest; hasPricing = true; }
     }
   }
 
   const validUntil = trip.previewExpiresAt
-    ? new Date(trip.previewExpiresAt).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
+    ? new Date(trip.previewExpiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : null;
 
+  const isAdvisor = !!advisor;
+
   return (
-    <div className="min-h-screen bg-paper">
-      {/* Header */}
-      <header className="border-b border-glacier bg-white">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <span className="font-display italic text-spruce text-xl tracking-tight">alp</span>
-          <a
-            href={`https://wa.me/919870400235`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-ink-soft hover:text-ink transition-colors"
+    <div className="min-h-screen" style={{ background: '#F6F4EE', fontFamily: 'Schibsted Grotesk, sans-serif' }}>
+
+      {/* ── Advisor bar (only when logged in) ──────────────────────────────── */}
+      {isAdvisor && (
+        <div
+          className="flex items-center justify-between px-5 py-2 text-[11px]"
+          style={{ background: 'rgba(30,58,47,0.08)', borderBottom: '1px solid rgba(30,58,47,0.12)' }}
+        >
+          <span style={{ color: '#4A514B' }}>
+            Previewing as client — this is exactly what your client sees.
+          </span>
+          <Link
+            href={`/trips/${trip.id}`}
+            className="font-medium"
+            style={{ color: '#1E3A2F' }}
           >
-            Questions? WhatsApp us
+            ← Back to editor
+          </Link>
+        </div>
+      )}
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header style={{ background: '#FFFFFF', borderBottom: '1px solid rgba(22,26,23,0.08)' }}>
+        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+          <span className="font-display italic text-spruce text-xl tracking-tight" style={{ fontFamily: 'Fraunces, Georgia, serif', color: '#1E3A2F' }}>alp</span>
+          <a
+            href="https://wa.me/919870400235"
+            target="_blank" rel="noopener noreferrer"
+            className="text-[12px] transition-colors"
+            style={{ color: '#4A514B' }}
+            onMouseOver={undefined}
+          >
+            Questions? WhatsApp →
           </a>
         </div>
       </header>
 
-      {/* Hero */}
-      <div className="bg-spruce text-white">
-        <div className="max-w-4xl mx-auto px-6 py-16">
-          <p className="text-brass text-xs font-sans uppercase tracking-widest mb-3">
-            Your personalised proposal
+      {/* ── Hero ───────────────────────────────────────────────────────────── */}
+      <div style={{ background: '#1E3A2F' }}>
+        <div className="max-w-3xl mx-auto px-6 py-14 md:py-20">
+          <p
+            className="text-[10px] uppercase tracking-[0.18em] mb-4"
+            style={{ color: 'rgba(169,139,82,0.85)', fontFamily: 'Schibsted Grotesk, sans-serif' }}
+          >
+            Your travel proposal
           </p>
-          <h1 className="font-display text-4xl md:text-5xl mb-4 leading-tight">
+          <h1
+            className="text-4xl md:text-5xl leading-[1.08] tracking-tight mb-6"
+            style={{ color: '#F6F4EE', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+          >
             {trip.label}
           </h1>
-          <div className="flex flex-wrap gap-6 text-white/70 text-sm mt-6">
-            <span>{trip.adults} {trip.adults === 1 ? 'adult' : 'adults'}{trip.children > 0 ? ` · ${trip.children} ${trip.children === 1 ? 'child' : 'children'}` : ''}</span>
+
+          <div
+            className="flex flex-wrap gap-x-6 gap-y-2 text-[13px]"
+            style={{ color: 'rgba(246,244,238,0.55)' }}
+          >
+            <span>
+              {trip.adults} {trip.adults === 1 ? 'adult' : 'adults'}
+              {trip.children > 0 ? ` · ${trip.children} ${trip.children === 1 ? 'child' : 'children'}` : ''}
+            </span>
             {destinations.length > 0 && (
-              <span>{destinations.length} {destinations.length === 1 ? 'destination' : 'destinations'}</span>
+              <span>{destinations.map(d => d.name).join(' → ')}</span>
             )}
             {totalNights > 0 && <span>{totalNights} nights</span>}
-            {hasPricing && (
-              <span className="text-brass font-mono">
-                From ₹{totalFromInr.toLocaleString('en-IN')}
-              </span>
-            )}
           </div>
+
+          {hasPricing && (
+            <div className="mt-8 pt-6" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <p className="text-[10px] uppercase tracking-[0.12em] mb-1" style={{ color: 'rgba(169,139,82,0.65)' }}>
+                Accommodation from
+              </p>
+              <p className="font-mono text-2xl" style={{ color: '#A98B52', fontFamily: 'Spline Sans Mono, monospace' }}>
+                ₹{totalFromInr.toLocaleString('en-IN')}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Itinerary */}
-      <main className="max-w-4xl mx-auto px-6 py-12 space-y-12">
+      {/* ── Body ───────────────────────────────────────────────────────────── */}
+      <main className="max-w-3xl mx-auto px-6 py-14 space-y-16">
         {destinations.map((dest, di) => {
-          const hotels = (dest.items ?? []).filter((i) => i.type === 'hotel');
+          const hotels = (dest.items ?? []).filter(i => i.type === 'hotel');
           return (
             <section key={dest.id}>
               {/* Destination header */}
-              <div className="flex items-baseline gap-4 mb-6 pb-3 border-b border-glacier">
-                <span className="font-mono text-xs text-ink-mute">{String(di + 1).padStart(2, '0')}</span>
-                <div>
-                  <h2 className="font-display text-2xl text-ink">{dest.name}</h2>
+              <div className="flex items-start gap-5 mb-10">
+                <span
+                  className="font-mono text-[10px] pt-[5px] flex-shrink-0"
+                  style={{ color: '#C9D2CC', fontFamily: 'Spline Sans Mono, monospace' }}
+                >
+                  {String(di + 1).padStart(2, '0')}
+                </span>
+                <div className="flex-1" style={{ borderTop: '1px solid rgba(22,26,23,0.1)', paddingTop: 14 }}>
+                  <h2
+                    className="text-2xl tracking-tight mb-1"
+                    style={{ color: '#161A17', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+                  >
+                    {dest.name}
+                  </h2>
                   {(dest.checkin || dest.checkout) && (
-                    <p className="text-sm text-ink-mute mt-0.5">
-                      {dest.checkin && formatDate(dest.checkin)}
+                    <p className="text-[12px]" style={{ color: '#8A9189' }}>
+                      {dest.checkin && fmtDate(dest.checkin)}
                       {dest.checkin && dest.checkout && ' — '}
-                      {dest.checkout && formatDate(dest.checkout)}
+                      {dest.checkout && fmtDate(dest.checkout)}
                       {dest.nights ? ` · ${dest.nights} nights` : ''}
                     </p>
                   )}
@@ -140,197 +191,241 @@ export default async function PreviewPage({ params }: Props) {
 
               {/* Hotels */}
               {hotels.length > 0 ? (
-                <div className="space-y-6">
+                <div className="ml-[36px] space-y-10">
                   {hotels.map((item, hi) => {
                     const hotel = item.hotelDetails;
-                    const confirmedRate = hotel?.rates.find((r) => r.isConfirmed);
-                    const displayRate = confirmedRate ?? hotel?.rates[0];
+                    const confirmedRate = hotel?.rates.find(r => r.isConfirmed);
+                    const displayRate = confirmedRate ?? hotel?.rates.find(r => r.status === 'done') ?? hotel?.rates[0];
                     const parsed = displayRate?.parsedData
-                      ? (JSON.parse(displayRate.parsedData) as {
-                          room_type?: string;
-                          total_inr?: number;
-                          subtotal_inr?: number;
-                          taxes_inr?: number;
-                          checkin?: string;
-                          checkout?: string;
-                          nights?: number;
-                          board_basis?: string;
-                          breakfast_included?: boolean;
-                          cancellation_free?: boolean;
-                          cancellation_deadline?: string;
-                          perks?: string[];
-                          inclusions?: string[];
-                        })
+                      ? (JSON.parse(displayRate.parsedData) as ParsedRate)
                       : null;
 
                     return (
-                      <div key={item.id} className="bg-white rounded-lg border border-glacier overflow-hidden">
-                        {/* Hotel header */}
-                        <div className="px-6 py-4 border-b border-glacier flex items-start justify-between gap-4">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs font-mono text-ink-mute">
-                                {String.fromCharCode(65 + hi)}
-                              </span>
-                              <h3 className="font-display text-lg text-ink">{item.title}</h3>
-                              {hotel?.stars && (
-                                <span className="text-xs text-brass">
-                                  {'★'.repeat(hotel.stars)}
-                                </span>
-                              )}
-                            </div>
-                            {hotel?.rating && (
-                              <span className="text-xs text-ink-mute">
-                                {hotel.rating.toFixed(1)} / 5
-                                {hotel.reviews ? ` · ${hotel.reviews.toLocaleString()} reviews` : ''}
+                      <div key={item.id}>
+                        {/* Hotel name row */}
+                        <div className="flex items-baseline justify-between gap-4 mb-3">
+                          <div className="flex items-baseline gap-3 min-w-0">
+                            <span
+                              className="font-mono text-[10px] flex-shrink-0"
+                              style={{ color: '#C9D2CC', fontFamily: 'Spline Sans Mono, monospace' }}
+                            >
+                              {String.fromCharCode(65 + hi)}
+                            </span>
+                            <h3
+                              className="text-xl leading-tight"
+                              style={{ color: '#161A17', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+                            >
+                              {item.title}
+                            </h3>
+                            {hotel?.stars && (
+                              <span className="text-[11px] flex-shrink-0" style={{ color: '#A98B52', letterSpacing: '-0.5px' }}>
+                                {'★'.repeat(Math.min(hotel.stars, 5))}
                               </span>
                             )}
                           </div>
                           {parsed?.total_inr && (
-                            <div className="text-right shrink-0">
-                              <p className="font-mono text-lg text-ink font-medium">
+                            <div className="text-right flex-shrink-0">
+                              <p
+                                className="font-mono text-lg leading-none"
+                                style={{ color: '#A98B52', fontFamily: 'Spline Sans Mono, monospace' }}
+                              >
                                 ₹{parsed.total_inr.toLocaleString('en-IN')}
                               </p>
-                              <p className="text-xs text-ink-mute">total</p>
+                              <p className="text-[10px] mt-0.5" style={{ color: '#8A9189' }}>total stay</p>
                             </div>
                           )}
                         </div>
 
-                        <div className="px-6 py-4 space-y-4">
-                          {/* Our take */}
-                          {hotel?.recommendation && (
-                            <p className="text-sm text-ink-soft italic border-l-2 border-brass pl-3">
-                              {hotel.recommendation}
-                            </p>
-                          )}
+                        {/* Recommendation (editorial note) */}
+                        {hotel?.recommendation && (
+                          <p
+                            className="text-[13px] leading-[1.65] mb-4 pl-4"
+                            style={{
+                              color: '#4A514B',
+                              borderLeft: '2px solid #A98B52',
+                              fontStyle: 'italic',
+                            }}
+                          >
+                            {hotel.recommendation}
+                          </p>
+                        )}
 
-                          {/* Rate details */}
-                          {parsed && (
-                            <div className="space-y-3">
+                        {/* Rate details */}
+                        {parsed && (
+                          <div className="space-y-3">
+                            {/* Room + dates row */}
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]" style={{ color: '#4A514B' }}>
                               {parsed.room_type && (
-                                <p className="text-sm font-medium text-ink">{parsed.room_type}</p>
+                                <span className="font-medium" style={{ color: '#161A17' }}>{parsed.room_type}</span>
                               )}
-
-                              {/* Dates */}
                               {(parsed.checkin || parsed.checkout) && (
-                                <div className="flex gap-6 text-sm text-ink-soft">
-                                  {parsed.checkin && (
-                                    <span>Check-in: <span className="text-ink">{formatDate(parsed.checkin)}</span></span>
-                                  )}
-                                  {parsed.checkout && (
-                                    <span>Check-out: <span className="text-ink">{formatDate(parsed.checkout)}</span></span>
-                                  )}
-                                  {parsed.nights && (
-                                    <span><span className="text-ink">{parsed.nights}</span> nights</span>
-                                  )}
-                                </div>
+                                <span style={{ fontFamily: 'Spline Sans Mono, monospace', fontSize: 11 }}>
+                                  {parsed.checkin && fmtDate(parsed.checkin)}
+                                  {parsed.checkin && parsed.checkout && ' — '}
+                                  {parsed.checkout && fmtDate(parsed.checkout)}
+                                  {parsed.nights ? ` · ${parsed.nights} nights` : ''}
+                                </span>
                               )}
+                            </div>
 
-                              {/* Board / inclusions */}
-                              <div className="flex flex-wrap gap-2">
-                                {parsed.board_basis && (
-                                  <span className="text-xs bg-paper-deep text-ink-soft px-2 py-1 rounded">
-                                    {parsed.board_basis}
-                                  </span>
+                            {/* Inclusions row */}
+                            <div className="flex flex-wrap gap-[6px]">
+                              {parsed.board_basis && (
+                                <span
+                                  className="text-[10px] px-2.5 py-[3px] rounded-[3px]"
+                                  style={{ background: 'rgba(30,58,47,0.07)', color: '#1E3A2F' }}
+                                >
+                                  {parsed.board_basis}
+                                </span>
+                              )}
+                              {parsed.breakfast_included && !parsed.board_basis && (
+                                <span
+                                  className="text-[10px] px-2.5 py-[3px] rounded-[3px]"
+                                  style={{ background: 'rgba(30,58,47,0.07)', color: '#1E3A2F' }}
+                                >
+                                  Breakfast included
+                                </span>
+                              )}
+                              {parsed.cancellation_free && (
+                                <span
+                                  className="text-[10px] px-2.5 py-[3px] rounded-[3px]"
+                                  style={{ background: 'rgba(34,134,58,0.08)', color: '#22863a' }}
+                                >
+                                  Free cancellation{parsed.cancellation_deadline ? ` until ${fmtDate(parsed.cancellation_deadline)}` : ''}
+                                </span>
+                              )}
+                              {parsed.cancellation_free === false && (
+                                <span
+                                  className="text-[10px] px-2.5 py-[3px] rounded-[3px]"
+                                  style={{ background: 'rgba(220,38,38,0.07)', color: '#dc2626' }}
+                                >
+                                  Non-refundable
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Perks */}
+                            {(parsed.perks?.length || parsed.inclusions?.length) && (
+                              <div>
+                                <p
+                                  className="text-[9px] uppercase tracking-[0.1em] mb-2"
+                                  style={{ color: '#8A9189' }}
+                                >
+                                  Included perks
+                                </p>
+                                <ul className="space-y-1">
+                                  {[...(parsed.perks ?? []), ...(parsed.inclusions ?? [])].map((p, pi) => (
+                                    <li key={pi} className="flex items-start gap-2 text-[12px]" style={{ color: '#4A514B' }}>
+                                      <span className="mt-[2px] flex-shrink-0" style={{ color: '#A98B52' }}>·</span>
+                                      {p}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Advisor-only: price breakdown + rate source */}
+                            {isAdvisor && (
+                              <div
+                                className="rounded-[3px] px-3 py-2.5 text-[11px] space-y-1"
+                                style={{ background: 'rgba(30,58,47,0.06)', border: '1px dashed rgba(30,58,47,0.15)' }}
+                              >
+                                <p className="font-mono text-[9px] uppercase tracking-[0.08em] mb-1.5" style={{ color: '#4A514B' }}>
+                                  Advisor view only
+                                </p>
+                                {displayRate?.source && (
+                                  <div className="flex justify-between" style={{ color: '#4A514B' }}>
+                                    <span>Source</span>
+                                    <span className="font-mono capitalize">{displayRate.source}</span>
+                                  </div>
                                 )}
-                                {parsed.breakfast_included && (
-                                  <span className="text-xs bg-paper-deep text-ink-soft px-2 py-1 rounded">
-                                    Breakfast included
-                                  </span>
+                                {parsed.subtotal_inr && (
+                                  <div className="flex justify-between" style={{ color: '#4A514B' }}>
+                                    <span>Room cost</span>
+                                    <span className="font-mono">₹{parsed.subtotal_inr.toLocaleString('en-IN')}</span>
+                                  </div>
+                                )}
+                                {parsed.taxes_inr && (
+                                  <div className="flex justify-between" style={{ color: '#4A514B' }}>
+                                    <span>Taxes & fees</span>
+                                    <span className="font-mono">₹{parsed.taxes_inr.toLocaleString('en-IN')}</span>
+                                  </div>
+                                )}
+                                {parsed.google_rate_inr && parsed.total_inr && parsed.google_rate_inr < parsed.total_inr * 0.92 && (
+                                  <div className="flex justify-between" style={{ color: '#dc2626' }}>
+                                    <span>Google rate</span>
+                                    <span className="font-mono">₹{parsed.google_rate_inr.toLocaleString('en-IN')} ⚠</span>
+                                  </div>
                                 )}
                               </div>
+                            )}
+                          </div>
+                        )}
 
-                              {/* Price breakdown */}
-                              {(parsed.subtotal_inr || parsed.taxes_inr) && (
-                                <div className="bg-paper-deep rounded p-3 space-y-1.5 text-sm">
-                                  {parsed.subtotal_inr && (
-                                    <div className="flex justify-between text-ink-soft">
-                                      <span>Subtotal</span>
-                                      <span className="font-mono">₹{parsed.subtotal_inr.toLocaleString('en-IN')}</span>
-                                    </div>
-                                  )}
-                                  {parsed.taxes_inr && (
-                                    <div className="flex justify-between text-ink-soft">
-                                      <span>Taxes & fees</span>
-                                      <span className="font-mono">₹{parsed.taxes_inr.toLocaleString('en-IN')}</span>
-                                    </div>
-                                  )}
-                                  {parsed.total_inr && (
-                                    <div className="flex justify-between font-medium text-ink pt-1 border-t border-glacier">
-                                      <span>Total</span>
-                                      <span className="font-mono">₹{parsed.total_inr.toLocaleString('en-IN')}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                        {!parsed && !hotel?.recommendation && (
+                          <p className="text-[12px] italic" style={{ color: '#8A9189' }}>
+                            Hotel details to follow.
+                          </p>
+                        )}
 
-                              {/* Cancellation */}
-                              {parsed.cancellation_free !== undefined && (
-                                <p className={`text-xs ${parsed.cancellation_free ? 'text-success' : 'text-danger'}`}>
-                                  {parsed.cancellation_free
-                                    ? `Free cancellation${parsed.cancellation_deadline ? ` until ${formatDate(parsed.cancellation_deadline)}` : ''}`
-                                    : 'Non-refundable'}
-                                </p>
-                              )}
-
-                              {/* Perks / inclusions */}
-                              {(parsed.perks?.length || parsed.inclusions?.length) && (
-                                <div>
-                                  <p className="text-xs text-brass font-medium uppercase tracking-wide mb-1.5">
-                                    Included perks
-                                  </p>
-                                  <ul className="space-y-1">
-                                    {[...(parsed.perks ?? []), ...(parsed.inclusions ?? [])].map((perk, pi) => (
-                                      <li key={pi} className="text-xs text-ink-soft flex items-start gap-1.5">
-                                        <span className="text-brass mt-0.5">·</span>
-                                        {perk}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {!parsed && !hotel?.recommendation && (
-                            <p className="text-sm text-ink-mute italic">Details to follow.</p>
-                          )}
-                        </div>
+                        {/* Divider between hotels */}
+                        {hi < hotels.length - 1 && (
+                          <div className="mt-8" style={{ borderBottom: '1px solid rgba(22,26,23,0.07)' }} />
+                        )}
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-ink-mute italic">Hotels to be confirmed.</p>
+                <p className="ml-[36px] text-[13px] italic" style={{ color: '#8A9189' }}>
+                  Hotels to be confirmed.
+                </p>
               )}
             </section>
           );
         })}
 
-        {/* Notes */}
+        {/* Trip notes (to client) */}
         {trip.notes && (
-          <section className="border-t border-glacier pt-8">
-            <h3 className="font-display text-lg text-ink mb-3">Notes from your advisor</h3>
-            <p className="text-sm text-ink-soft leading-relaxed whitespace-pre-wrap">{trip.notes}</p>
+          <section style={{ borderTop: '1px solid rgba(22,26,23,0.09)', paddingTop: 32 }}>
+            <p
+              className="text-[10px] uppercase tracking-[0.12em] mb-4"
+              style={{ color: '#8A9189' }}
+            >
+              Notes from your advisor
+            </p>
+            <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: '#4A514B' }}>
+              {trip.notes}
+            </p>
           </section>
         )}
 
-        {/* Footer CTA */}
-        <section className="border-t border-glacier pt-8 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        {/* CTA */}
+        <section
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5"
+          style={{ borderTop: '1px solid rgba(22,26,23,0.09)', paddingTop: 32 }}
+        >
           <div>
-            <p className="font-display text-lg text-ink">Ready to book?</p>
-            <p className="text-sm text-ink-mute mt-1">
-              Message your advisor on WhatsApp to confirm this itinerary.
+            <p
+              className="text-xl mb-1"
+              style={{ color: '#161A17', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+            >
+              Ready to move forward?
+            </p>
+            <p className="text-[12px]" style={{ color: '#8A9189' }}>
+              Message your advisor to confirm. They&apos;ll handle the bookings.
             </p>
             {validUntil && (
-              <p className="text-xs text-ink-mute mt-2">Quote valid until {validUntil}</p>
+              <p className="text-[11px] mt-1" style={{ color: '#8A9189' }}>
+                Quote valid until {validUntil}
+              </p>
             )}
           </div>
           <a
-            href={`https://wa.me/919870400235?text=${encodeURIComponent(`Hi, I'd like to proceed with the quote for ${trip.label}.`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 bg-spruce hover:bg-spruce-light text-white text-sm rounded transition-colors"
+            href={`https://wa.me/919870400235?text=${encodeURIComponent(`Hi, I'd like to confirm the itinerary for ${trip.label}.`)}`}
+            target="_blank" rel="noopener noreferrer"
+            className="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-medium text-white rounded-sm transition-opacity hover:opacity-90"
+            style={{ background: '#1E3A2F' }}
           >
             Confirm on WhatsApp
           </a>
@@ -338,23 +433,43 @@ export default async function PreviewPage({ params }: Props) {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-glacier mt-8 py-6 text-center">
-        <p className="text-xs text-ink-mute">
-          Prepared by <span className="font-medium text-ink-soft">Alp Travel Co.</span> — Fora Pro Advisor · IATA #33520476
-        </p>
+      <footer
+        className="py-8 text-center text-[11px]"
+        style={{ borderTop: '1px solid rgba(22,26,23,0.07)', color: '#8A9189' }}
+      >
+        Prepared by <span style={{ color: '#4A514B' }}>Alp Travel Co.</span>
+        {' '}· Fora Pro Advisor · IATA #33520476
+        {' '}· Affiliated with Virtuoso
       </footer>
     </div>
   );
 }
 
-function formatDate(dateStr: string): string {
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface ParsedRate {
+  room_type?: string;
+  total_inr?: number;
+  subtotal_inr?: number;
+  taxes_inr?: number;
+  checkin?: string;
+  checkout?: string;
+  nights?: number;
+  board_basis?: string;
+  breakfast_included?: boolean;
+  cancellation_free?: boolean;
+  cancellation_deadline?: string;
+  perks?: string[];
+  inclusions?: string[];
+  google_rate_inr?: number;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric',
     });
-  } catch {
-    return dateStr;
-  }
+  } catch { return dateStr; }
 }
