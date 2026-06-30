@@ -12,6 +12,7 @@ import {
   rates,
   clients,
   advisorProfiles,
+  itineraryDays,
 } from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
@@ -273,6 +274,14 @@ export async function getTripWithDetailsByPreviewKey(key: string) {
                 },
               },
             },
+          },
+        },
+      },
+      itineraryDays: {
+        orderBy: (d, { asc }) => [asc(d.sortOrder), asc(d.dayNumber)],
+        with: {
+          blocks: {
+            orderBy: (b, { asc }) => [asc(b.sortOrder)],
           },
         },
       },

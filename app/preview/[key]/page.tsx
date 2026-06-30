@@ -77,6 +77,8 @@ export default async function PreviewPage({ params }: Props) {
 
   // ── Compute totals ────────────────────────────────────────────────────────
   const destinations = trip.destinations ?? [];
+  const itineraryDays = (trip as { itineraryDays?: ItineraryDayPreview[] }).itineraryDays ?? [];
+  const hasItinerary = itineraryDays.some(d => d.title || d.summary || (d.blocks && d.blocks.length > 0));
   const totalNights = destinations.reduce((sum, d) => sum + (d.nights ?? 0), 0);
 
   let totalFromInr = 0;
@@ -103,11 +105,21 @@ export default async function PreviewPage({ params }: Props) {
 
   return (
     <div className="min-h-screen" style={{ background: '#F6F4EE', fontFamily: 'Schibsted Grotesk, sans-serif' }}>
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-section { page-break-inside: avoid; }
+          body { background: #F6F4EE !important; }
+          header, footer { display: none !important; }
+          main { padding-top: 0 !important; }
+          a[href]::after { content: none !important; }
+        }
+      `}</style>
 
       {/* ── Advisor bar (only when logged in) ──────────────────────────────── */}
       {isAdvisor && (
         <div
-          className="flex items-center justify-between px-5 py-2 text-[11px]"
+          className="no-print flex items-center justify-between px-5 py-2 text-[11px]"
           style={{ background: 'rgba(30,58,47,0.08)', borderBottom: '1px solid rgba(30,58,47,0.12)' }}
         >
           <span style={{ color: '#4A514B' }}>
@@ -124,7 +136,7 @@ export default async function PreviewPage({ params }: Props) {
       )}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header style={{ background: '#FFFFFF', borderBottom: '1px solid rgba(22,26,23,0.08)' }}>
+      <header className="no-print" style={{ background: '#FFFFFF', borderBottom: '1px solid rgba(22,26,23,0.08)' }}>
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="font-display italic text-spruce text-xl tracking-tight" style={{ fontFamily: 'Fraunces, Georgia, serif', color: '#1E3A2F' }}>alp</span>
           <a
@@ -217,6 +229,63 @@ export default async function PreviewPage({ params }: Props) {
                 </p>
               </div>
             )}
+          </section>
+        )}
+
+        {/* ── Day-by-day itinerary ─────────────────────────────────────── */}
+        {hasItinerary && (
+          <section className="print-section">
+            <div className="flex items-start gap-5 mb-10">
+              <div className="flex-1" style={{ borderTop: '1px solid rgba(22,26,23,0.1)', paddingTop: 14 }}>
+                <p className="text-[10px] uppercase tracking-[0.14em] mb-1" style={{ color: '#A98B52' }}>
+                  Day by day
+                </p>
+              </div>
+            </div>
+            <div className="space-y-8">
+              {itineraryDays.map(day => (
+                <div key={day.id} className="flex items-start gap-5">
+                  <div className="flex-shrink-0 w-[36px] text-right">
+                    <span
+                      className="font-mono text-[10px]"
+                      style={{ color: '#C9D2CC', fontFamily: 'Spline Sans Mono, monospace' }}
+                    >
+                      {String(day.dayNumber).padStart(2, '0')}
+                    </span>
+                    {day.date && (
+                      <p className="font-mono text-[9px] mt-[2px]" style={{ color: '#C9D2CC' }}>
+                        {fmtDateShort(day.date)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex-1 pb-8" style={{ borderBottom: '1px solid rgba(22,26,23,0.07)' }}>
+                    {day.title && (
+                      <h4
+                        className="text-[18px] leading-snug mb-2"
+                        style={{ color: '#161A17', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+                      >
+                        {day.title}
+                      </h4>
+                    )}
+                    {day.summary && (
+                      <p
+                        className="text-[13px] leading-[1.7] mb-4"
+                        style={{ color: '#4A514B' }}
+                      >
+                        {day.summary}
+                      </p>
+                    )}
+                    {day.blocks && day.blocks.length > 0 && (
+                      <div className="space-y-2">
+                        {day.blocks.map(block => (
+                          <ItineraryBlockItem key={block.id} block={block} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
@@ -496,7 +565,7 @@ export default async function PreviewPage({ params }: Props) {
 
         {/* CTA */}
         <section
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5"
+          className="no-print flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5"
           style={{ borderTop: '1px solid rgba(22,26,23,0.09)', paddingTop: 32 }}
         >
           <div>
@@ -528,7 +597,7 @@ export default async function PreviewPage({ params }: Props) {
 
       {/* Footer */}
       <footer
-        className="py-8 text-center text-[11px]"
+        className="no-print py-8 text-center text-[11px]"
         style={{ borderTop: '1px solid rgba(22,26,23,0.07)', color: '#8A9189' }}
       >
         {advisorProfile?.quoteFooter ? (
@@ -564,6 +633,23 @@ interface ParsedRate {
   google_rate_inr?: number;
 }
 
+interface ItineraryBlockPreview {
+  id: number;
+  type: string;
+  content: string | null;
+  sortOrder: number;
+}
+
+interface ItineraryDayPreview {
+  id: number;
+  dayNumber: number;
+  date: string | null;
+  title: string | null;
+  summary: string | null;
+  sortOrder: number;
+  blocks: ItineraryBlockPreview[];
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDate(dateStr: string): string {
@@ -572,4 +658,43 @@ function fmtDate(dateStr: string): string {
       day: 'numeric', month: 'short', year: 'numeric',
     });
   } catch { return dateStr; }
+}
+
+function fmtDateShort(dateStr: string): string {
+  try {
+    return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short',
+    });
+  } catch { return dateStr; }
+}
+
+function ItineraryBlockItem({ block }: { block: ItineraryBlockPreview }) {
+  const BLOCK_STYLES: Record<string, { prefix: string; color: string; bg?: string }> = {
+    tip:            { prefix: 'Tip',      color: '#A98B52', bg: 'rgba(169,139,82,0.06)' },
+    meal:           { prefix: 'Meal',     color: '#2E6B45' },
+    transport_note: { prefix: 'Transfer', color: '#4A514B' },
+    hotel_ref:      { prefix: 'Hotel',    color: '#1E3A2F', bg: 'rgba(30,58,47,0.05)' },
+    map_pin:        { prefix: '📍',       color: '#4A514B' },
+    text:           { prefix: '',         color: '#4A514B' },
+  };
+
+  const style = BLOCK_STYLES[block.type] ?? BLOCK_STYLES.text;
+  if (!block.content) return null;
+
+  return (
+    <div
+      className="flex items-start gap-2.5 text-[12px] rounded-[3px] px-3 py-2"
+      style={{ background: style.bg ?? 'transparent', color: style.color }}
+    >
+      {style.prefix && (
+        <span
+          className="font-mono text-[9px] uppercase tracking-[0.08em] pt-[3px] flex-shrink-0"
+          style={{ color: style.color, opacity: 0.65 }}
+        >
+          {style.prefix}
+        </span>
+      )}
+      <span className="leading-relaxed">{block.content}</span>
+    </div>
+  );
 }
