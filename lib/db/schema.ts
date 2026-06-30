@@ -116,6 +116,8 @@ export const trips = mysqlTable('trips', {
   urgencyFlag: varchar('urgency_flag', { length: 20 }).default('standard'),
   // 'standard' | 'urgent' | 'very_urgent'
   clarificationFlags: text('clarification_flags'),     // JSON: ClarificationFlag[]
+  clientAcceptedAt: bigint('client_accepted_at', { mode: 'number' }),  // epoch ms when client accepted
+  clientAcceptanceNote: text('client_acceptance_note'),                 // optional note from client on acceptance
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

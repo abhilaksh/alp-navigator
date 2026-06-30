@@ -7,6 +7,7 @@ import { calcPerkValue, formatPerkValue } from '@/lib/perk-value';
 import { trips } from '@/lib/db/schema';
 import { eq, sql as drizzleSql } from 'drizzle-orm';
 import type { Metadata } from 'next';
+import { AcceptanceBlock } from '@/components/preview/acceptance-block';
 
 type Props = { params: Promise<{ key: string }> };
 
@@ -103,10 +104,6 @@ export default async function PreviewPage({ params }: Props) {
       }
     }
   }
-
-  const validUntil = trip.previewExpiresAt
-    ? new Date(trip.previewExpiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    : null;
 
   const isAdvisor = !!advisor;
 
@@ -642,35 +639,13 @@ export default async function PreviewPage({ params }: Props) {
         )}
 
         {/* CTA */}
-        <section
-          className="no-print flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5"
-          style={{ borderTop: '1px solid rgba(22,26,23,0.09)', paddingTop: 32 }}
-        >
-          <div>
-            <p
-              className="text-xl mb-1"
-              style={{ color: '#161A17', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
-            >
-              Ready to move forward?
-            </p>
-            <p className="text-[12px]" style={{ color: '#8A9189' }}>
-              Message your advisor to confirm. They&apos;ll handle the bookings.
-            </p>
-            {validUntil && (
-              <p className="text-[11px] mt-1" style={{ color: '#8A9189' }}>
-                Quote valid until {validUntil}
-              </p>
-            )}
-          </div>
-          <a
-            href={`${waBase}?text=${encodeURIComponent(`Hi, I'd like to confirm the itinerary for ${trip.label}.`)}`}
-            target="_blank" rel="noopener noreferrer"
-            className="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2.5 text-[13px] font-medium text-white rounded-sm transition-opacity hover:opacity-90"
-            style={{ background: '#1E3A2F' }}
-          >
-            Confirm on WhatsApp
-          </a>
-        </section>
+        <AcceptanceBlock
+          previewKey={trip.previewKey!}
+          waLink={waBase}
+          tripLabel={trip.label}
+          alreadyAccepted={!!(trip as { clientAcceptedAt?: number | null }).clientAcceptedAt}
+          expiresAt={(trip as { previewExpiresAt?: number | null }).previewExpiresAt ?? null}
+        />
       </main>
 
       {/* Footer */}
