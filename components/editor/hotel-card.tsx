@@ -20,6 +20,7 @@ export interface HotelDetailState {
   lat: number | null;
   lng: number | null;
   googleRateInr: number | null;
+  holdExpiresAt: string | null;
   rates: RateState[];
 }
 
@@ -48,6 +49,7 @@ interface HotelCardProps {
   onRecommendationBlur: (hotelDetailId: number, value: string) => void;
   onLocationScoreChange: (itemId: number, value: string) => void;
   onLocationScoreBlur: (hotelDetailId: number, value: string) => void;
+  onHoldExpiryChange: (hotelDetailId: number, date: string | null) => void;
 }
 
 function renderStars(n: number | null) {
@@ -59,6 +61,7 @@ export function HotelCard({
   item, index,
   onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
+  onHoldExpiryChange,
 }: HotelCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingRemove, setPendingRemove] = useState(false);
@@ -85,6 +88,20 @@ export function HotelCard({
   const foraUrl = detail?.foraId ? `https://travel.fora.travel/hotels/${detail.foraId}` : null;
   const expediaUrl = 'https://www.expediataap.com/';
   const websiteUrl = detail?.hotelWebsite ?? null;
+
+  // Hold expiry computation
+  const holdExpiry = (() => {
+    if (!detail?.holdExpiresAt) return null;
+    const now = new Date();
+    const expiry = new Date(detail.holdExpiresAt + 'T23:59:59');
+    const msLeft = expiry.getTime() - now.getTime();
+    const hLeft = msLeft / (1000 * 60 * 60);
+    if (msLeft < 0) return { label: 'Hold expired', color: '#dc2626' };
+    if (hLeft < 24) return { label: 'Hold expiring!', color: '#dc2626' };
+    if (hLeft < 48) return { label: 'Hold: tomorrow', color: '#d97706' };
+    const dLeft = Math.ceil(hLeft / 24);
+    return { label: `Hold: ${dLeft}d`, color: '#64748b' };
+  })();
 
   // GPS text
   const gpsText = (detail?.lat != null && detail?.lng != null)
@@ -165,6 +182,16 @@ export function HotelCard({
             </span>
           )}
 
+          {/* Hold expiry badge */}
+          {holdExpiry && (
+            <span
+              className="font-mono text-[10px] font-medium flex-shrink-0 px-[6px] py-[2px] rounded-[3px]"
+              style={{ color: holdExpiry.color, background: `${holdExpiry.color}18` }}
+            >
+              {holdExpiry.label}
+            </span>
+          )}
+
           {/* Collapse toggle */}
           <button
             onClick={() => setCollapsed(v => !v)}
@@ -232,6 +259,22 @@ export function HotelCard({
                   <span className="font-mono text-[9px] text-ink-mute">/ 10</span>
                 </div>
               </div>
+
+              {/* Hold expiry date */}
+              {detail && (
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[3px]">Hold expires</div>
+                  <input
+                    type="date"
+                    value={detail.holdExpiresAt ?? ''}
+                    onChange={e => onHoldExpiryChange(detail.id, e.target.value || null)}
+                    className="font-mono text-[12px] text-ink-soft bg-transparent border-none outline-none p-0 transition-colors"
+                    style={{ borderBottom: '1px solid transparent', colorScheme: 'light' }}
+                    onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
+                    onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                  />
+                </div>
+              )}
 
               {/* Our take */}
               <div>

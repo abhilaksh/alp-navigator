@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { name, recommendation, locationScore, lat, lng, sortOrder } = body;
+  const { name, recommendation, locationScore, lat, lng, sortOrder, holdExpiresAt } = body;
 
   // Update tripItems fields
   const itemUpdates: Record<string, unknown> = { updatedAt: new Date() };
@@ -38,6 +38,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (locationScore !== undefined) detailUpdates.locationScore = locationScore;
   if (lat !== undefined) detailUpdates.lat = lat;
   if (lng !== undefined) detailUpdates.lng = lng;
+  if (holdExpiresAt !== undefined) detailUpdates.holdExpiresAt = holdExpiresAt || null;
 
   if (Object.keys(detailUpdates).length > 0) {
     await db.update(hotelDetails).set(detailUpdates).where(eq(hotelDetails.id, hotelDetailId));

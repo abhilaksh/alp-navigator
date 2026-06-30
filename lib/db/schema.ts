@@ -6,6 +6,7 @@ import {
   bigint,
   real,
   timestamp,
+  date,
 } from 'drizzle-orm/mysql-core';
 import { relations } from 'drizzle-orm';
 
@@ -164,6 +165,7 @@ export const hotelDetails = mysqlTable('hotel_details', {
   lat: real('lat'),
   lng: real('lng'),
   serpData: text('serp_data'),              // full SerpAPI result JSON
+  holdExpiresAt: date('hold_expires_at'),   // hold expiry for advance-purchase rates
 });
 
 // ─── Rates ────────────────────────────────────────────────────────────────────

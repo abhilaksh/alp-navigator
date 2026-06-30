@@ -34,6 +34,13 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const clientEmail = (initialTrip.client as { email?: string | null } | null)?.email ?? null;
   const clientWa    = (initialTrip.client as { whatsapp?: string | null } | null)?.whatsapp ?? null;
 
+  const expiringHolds = hotelItems.filter(h => {
+    const exp = h.hotelDetails?.holdExpiresAt;
+    if (!exp) return false;
+    const msLeft = new Date(exp + 'T23:59:59').getTime() - Date.now();
+    return msLeft < 48 * 60 * 60 * 1000;
+  });
+
   // ─── Auto-save (debounced 1 s) ──────────────────────────────────────────────
   const scheduleSave = useCallback((patch: object) => {
     clearTimeout(saveTimer.current ?? undefined);
@@ -304,6 +311,21 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ locationScore: score }),
+    }).catch(() => {});
+  }
+
+  function handleHoldExpiryChange(hotelDetailId: number, date: string | null) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => {
+        if (!isHotelItem(i) || i.hotelDetails?.id !== hotelDetailId) return i;
+        return { ...i, hotelDetails: { ...i.hotelDetails!, holdExpiresAt: date } };
+      }),
+    })));
+    fetch(`/api/hotels/${hotelDetailId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ holdExpiresAt: date }),
     }).catch(() => {});
   }
 
@@ -613,6 +635,17 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                 />
               )}
 
+              {/* Hold expiry warning banner */}
+              {expiringHolds.length > 0 && (
+                <div className="mb-3 px-3 py-2 rounded-[4px] text-xs font-sans" style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.25)', color: '#b91c1c' }}>
+                  <span className="font-semibold">⚠ Hold expiring soon</span>
+                  {' — '}
+                  {expiringHolds.map(h => h.title).join(', ')}
+                  {' hold'}
+                  {expiringHolds.length > 1 ? 's expire' : ' expires'} within 48 hours. Confirm or release with the property.
+                </div>
+              )}
+
               {/* Hotels + line items count row */}
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-semibold tracking-[0.1em] uppercase text-ink-mute">
@@ -651,6 +684,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                         onRecommendationBlur={handleRecommendationBlur}
                         onLocationScoreChange={handleLocationScoreChange}
                         onLocationScoreBlur={handleLocationScoreBlur}
+                        onHoldExpiryChange={handleHoldExpiryChange}
                       />
                     );
                   }
