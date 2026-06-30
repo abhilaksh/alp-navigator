@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, count } from 'drizzle-orm';
+import { desc, and, eq, isNull, count, min, isNotNull } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
   activityLogs,
@@ -156,6 +156,25 @@ export async function getTripsWithDetailsForUser() {
     .leftJoin(destCountSq, eq(trips.id, destCountSq.tripId))
     .where(eq(trips.userId, user.id))
     .orderBy(desc(trips.updatedAt));
+}
+
+export async function getHoldExpiryByTrip(userId: number): Promise<Map<number, string>> {
+  const rows = await db
+    .select({
+      tripId: trips.id,
+      minHoldExpiry: min(hotelDetails.holdExpiresAt).as('min_hold'),
+    })
+    .from(trips)
+    .innerJoin(tripItems, eq(tripItems.tripId, trips.id))
+    .innerJoin(hotelDetails, eq(hotelDetails.itemId, tripItems.id))
+    .where(and(eq(trips.userId, userId), isNotNull(hotelDetails.holdExpiresAt)))
+    .groupBy(trips.id);
+
+  const map = new Map<number, string>();
+  for (const r of rows) {
+    if (r.tripId && r.minHoldExpiry) map.set(r.tripId, r.minHoldExpiry);
+  }
+  return map;
 }
 
 export async function getTripById(id: number) {
