@@ -160,6 +160,34 @@ export async function getTripsWithDetailsForUser() {
     .orderBy(desc(trips.updatedAt));
 }
 
+export async function getCommissionSummaryForUser(): Promise<{
+  expected: number; received: number; pending: number; count: number;
+}> {
+  const user = await getUser();
+  if (!user) return { expected: 0, received: 0, pending: 0, count: 0 };
+
+  const rows = await db
+    .select({
+      commissionAmountInr: hotelDetails.commissionAmountInr,
+      commissionPaidAt: hotelDetails.commissionPaidAt,
+    })
+    .from(hotelDetails)
+    .innerJoin(tripItems, eq(tripItems.id, hotelDetails.itemId))
+    .innerJoin(trips, eq(trips.id, tripItems.tripId))
+    .where(and(eq(trips.userId, user.id), isNotNull(hotelDetails.commissionAmountInr)));
+
+  let expected = 0, received = 0, count = 0;
+  for (const r of rows) {
+    const amt = r.commissionAmountInr ?? 0;
+    if (amt > 0) {
+      expected += amt;
+      count++;
+      if (r.commissionPaidAt) received += amt;
+    }
+  }
+  return { expected, received, pending: expected - received, count };
+}
+
 export async function getHoldExpiryByTrip(userId: number): Promise<Map<number, string>> {
   const rows = await db
     .select({

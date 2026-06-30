@@ -350,9 +350,10 @@ const STATUS_TABS = [
 
 interface PipelineViewProps {
   trips: PipelineTrip[];
+  commissionSummary?: { expected: number; received: number; pending: number; count: number };
 }
 
-export function PipelineView({ trips }: PipelineViewProps) {
+export function PipelineView({ trips, commissionSummary }: PipelineViewProps) {
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [activeStatus, setActiveStatus] = useState<string>('all');
 
@@ -425,6 +426,30 @@ export function PipelineView({ trips }: PipelineViewProps) {
 
       {/* Alert rail */}
       <AlertRail trips={trips} />
+
+      {/* Commission summary — only shown when data exists */}
+      {commissionSummary && commissionSummary.count > 0 && (
+        <div
+          className="flex items-center gap-6 px-4 py-3 rounded-[5px] mb-4"
+          style={{ background: 'rgba(22,26,23,0.04)', border: '1px solid rgba(22,26,23,0.07)' }}
+        >
+          <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-mute">Commission</span>
+          <div className="flex items-baseline gap-1">
+            <span className="font-mono text-[15px] text-ink">{inr(commissionSummary.expected)}</span>
+            <span className="font-sans text-[10px] text-ink-mute">expected · {commissionSummary.count} hotel{commissionSummary.count !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <span className="font-mono text-[15px]" style={{ color: commissionSummary.received > 0 ? '#2E6B45' : '#9AA59B' }}>{inr(commissionSummary.received)}</span>
+            <span className="font-sans text-[10px] text-ink-mute">received</span>
+          </div>
+          {commissionSummary.pending > 0 && (
+            <div className="flex items-baseline gap-1">
+              <span className="font-mono text-[15px]" style={{ color: '#A98B52' }}>{inr(commissionSummary.pending)}</span>
+              <span className="font-sans text-[10px] text-ink-mute">pending</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Status tabs (list view only) */}
       {view === 'list' && (

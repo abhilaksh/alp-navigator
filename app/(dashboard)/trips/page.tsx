@@ -1,11 +1,12 @@
-import { getTripsWithDetailsForUser, getHoldExpiryByTrip, getUser } from '@/lib/db/queries';
+import { getTripsWithDetailsForUser, getHoldExpiryByTrip, getUser, getCommissionSummaryForUser } from '@/lib/db/queries';
 import { PipelineView, type PipelineTrip } from './pipeline-view';
 
 export default async function TripsPage() {
   const user = await getUser();
-  const [allTrips, holdMap] = await Promise.all([
+  const [allTrips, holdMap, commissionSummary] = await Promise.all([
     getTripsWithDetailsForUser(),
     user ? getHoldExpiryByTrip(user.id) : Promise.resolve(new Map<number, string>()),
+    getCommissionSummaryForUser(),
   ]);
 
   const trips: PipelineTrip[] = allTrips.map(t => ({
@@ -17,7 +18,7 @@ export default async function TripsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-5 lg:px-8 py-8">
-      <PipelineView trips={trips} />
+      <PipelineView trips={trips} commissionSummary={commissionSummary} />
     </div>
   );
 }
