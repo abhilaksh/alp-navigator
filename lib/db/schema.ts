@@ -109,6 +109,12 @@ export const trips = mysqlTable('trips', {
   // 'new_inquiry' | 'acknowledged' | 'in_progress' | 'brief_complete' | 'research_ready'
   acknowledgedAt: bigint('acknowledged_at', { mode: 'number' }),  // epoch ms when status moved to acknowledged
   briefCompleteAt: bigint('brief_complete_at', { mode: 'number' }), // epoch ms when brief was completed
+  // Budget & urgency (Phase 1 intake fields)
+  budgetStatedInr: int('budget_stated_inr'),           // client-stated budget (often understated)
+  budgetEstimatedInr: int('budget_estimated_inr'),     // advisor's estimate of actual spend
+  urgencyFlag: varchar('urgency_flag', { length: 20 }).default('standard'),
+  // 'standard' | 'urgent' | 'very_urgent'
+  clarificationFlags: text('clarification_flags'),     // JSON: ClarificationFlag[]
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

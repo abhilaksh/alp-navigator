@@ -17,6 +17,7 @@ import { ClientContextPanel } from '@/components/editor/client-context-panel';
 import { PaymentPanel } from '@/components/editor/payment-panel';
 import { VersionHistoryPanel } from '@/components/editor/version-history-panel';
 import { ChangeRequestsPanel } from '@/components/editor/change-requests-panel';
+import { IntakePanel } from '@/components/editor/intake-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -178,6 +179,12 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [intakeStatus, setIntakeStatus] = useState<IntakeStatus>(
     ((initialTrip as { intakeStatus?: string | null }).intakeStatus as IntakeStatus | null) ?? 'new_inquiry'
   );
+  const [budgetStatedInr] = useState<number | null>((initialTrip as { budgetStatedInr?: number | null }).budgetStatedInr ?? null);
+  const [budgetEstimatedInr] = useState<number | null>((initialTrip as { budgetEstimatedInr?: number | null }).budgetEstimatedInr ?? null);
+  const [urgencyFlag] = useState<'standard' | 'urgent' | 'very_urgent'>(
+    ((initialTrip as { urgencyFlag?: string | null }).urgencyFlag as 'standard' | 'urgent' | 'very_urgent' | null) ?? 'standard'
+  );
+  const clarificationFlagsRaw = (initialTrip as { clarificationFlags?: string | null }).clarificationFlags ?? null;
 
   const activeDest  = destinations.find(d => d.id === activeDestId) ?? null;
   const hotelItems  = (activeDest?.items ?? []).filter(isHotelItem);
@@ -1206,6 +1213,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   tripStatus={status}
                 />
               </div>
+
+              {/* Intake brief: budget, urgency, clarification flags */}
+              <IntakePanel
+                tripId={id}
+                budgetStatedInr={budgetStatedInr}
+                budgetEstimatedInr={budgetEstimatedInr}
+                urgencyFlag={urgencyFlag}
+                clarificationFlagsRaw={clarificationFlagsRaw}
+              />
 
               {/* Client context (preferences + passport) */}
               {clientId && (

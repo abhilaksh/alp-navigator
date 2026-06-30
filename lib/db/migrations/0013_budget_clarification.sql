@@ -1,0 +1,4 @@
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS budget_stated_inr INT NULL;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS budget_estimated_inr INT NULL;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS urgency_flag VARCHAR(20) NULL DEFAULT 'standard';
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS clarification_flags TEXT NULL;
