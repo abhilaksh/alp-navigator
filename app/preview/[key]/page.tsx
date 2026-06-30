@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getTripWithDetailsByPreviewKey } from '@/lib/db/queries';
 import { getUser } from '@/lib/db/queries';
 import { db } from '@/lib/db/drizzle';
+import { calcPerkValue, formatPerkValue } from '@/lib/perk-value';
 import { trips } from '@/lib/db/schema';
 import { eq, sql as drizzleSql } from 'drizzle-orm';
 import type { Metadata } from 'next';
@@ -351,6 +352,25 @@ export default async function PreviewPage({ params }: Props) {
                                     </li>
                                   ))}
                                 </ul>
+                                {/* Perk value estimate */}
+                                {(() => {
+                                  const allPerks = [...(parsed.perks ?? []), ...(parsed.inclusions ?? [])];
+                                  const { totalInr } = calcPerkValue(allPerks, parsed.nights ?? 1);
+                                  if (totalInr <= 0) return null;
+                                  return (
+                                    <div
+                                      className="flex items-center justify-between mt-3 px-3 py-2 rounded-[3px]"
+                                      style={{ background: 'rgba(169,139,82,0.07)', border: '1px solid rgba(169,139,82,0.2)' }}
+                                    >
+                                      <span className="text-[10px] uppercase tracking-[0.08em]" style={{ color: '#8A9189' }}>
+                                        Est. partner perk value
+                                      </span>
+                                      <span className="font-mono text-[12px] font-medium" style={{ color: '#A98B52' }}>
+                                        {formatPerkValue(totalInr)}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             )}
 

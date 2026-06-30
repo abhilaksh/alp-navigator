@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronRight, X, Check, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import type { ParsedRate } from '@/lib/db/schema';
+import { calcPerkValue, formatPerkValue } from '@/lib/perk-value';
 
 export interface RateState {
   id: number;
@@ -315,6 +316,24 @@ function DoneState({ parsed }: { parsed: ParsedRate }) {
           ))}
         </div>
       )}
+
+      {/* Partner perk value estimate */}
+      {(() => {
+        const allPerks = [...(parsed.perks ?? []), ...(parsed.inclusions ?? [])];
+        const { totalInr } = calcPerkValue(allPerks, parsed.nights ?? 1);
+        if (totalInr <= 0) return null;
+        return (
+          <div
+            className="flex items-center justify-between mt-2 px-2.5 py-1.5 rounded-[3px]"
+            style={{ background: 'rgba(169,139,82,0.06)', border: '1px solid rgba(169,139,82,0.16)' }}
+          >
+            <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-mute">Est. partner perk value</span>
+            <span className="font-mono text-[11px] font-medium" style={{ color: '#A98B52' }}>
+              {formatPerkValue(totalInr)}
+            </span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
