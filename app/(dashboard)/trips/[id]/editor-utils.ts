@@ -30,6 +30,10 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
             thumbnail: i.hotelDetails.thumbnail, lat: i.hotelDetails.lat,
             lng: i.hotelDetails.lng, googleRateInr: i.hotelDetails.googleRateInr,
             holdExpiresAt: i.hotelDetails.holdExpiresAt ?? null,
+            preferredStatus: (i.hotelDetails as { preferredStatus?: string | null }).preferredStatus ?? null,
+            eliminationNote: (i.hotelDetails as { eliminationNote?: string | null }).eliminationNote ?? null,
+            familiarityScore: (i.hotelDetails as { familiarityScore?: number | null }).familiarityScore ?? null,
+            familiarityDate: (i.hotelDetails as { familiarityDate?: string | null }).familiarityDate ?? null,
             foraPartner: (i.hotelDetails as { foraPartner?: unknown }).foraPartner ?? null,
             rates: (i.hotelDetails.rates ?? []).map(r => ({
               ...r,

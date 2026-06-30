@@ -448,7 +448,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           recommendation: null, foraId: hotel.foraId, hotelWebsite: null,
           thumbnail: hotel.thumbnail, lat: hotel.lat ?? null,
           lng: hotel.lng ?? null, googleRateInr: hotel.googleRateInr,
-          holdExpiresAt: null, foraPartner, rates: [],
+          holdExpiresAt: null, preferredStatus: null, eliminationNote: null,
+          familiarityScore: null, familiarityDate: null, foraPartner, rates: [],
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
@@ -473,7 +474,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           stars: null, rating: null, locationScore: null,
           recommendation: null, foraId: null, hotelWebsite: null,
           thumbnail: null, lat: null, lng: null, googleRateInr: null,
-          holdExpiresAt: null, rates: [],
+          holdExpiresAt: null, preferredStatus: null, eliminationNote: null,
+          familiarityScore: null, familiarityDate: null, rates: [],
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
@@ -554,6 +556,51 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ holdExpiresAt: date }),
+    }).catch(() => {});
+  }
+
+  function handlePreferredStatusChange(hotelDetailId: number, status: string) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => {
+        if (!isHotelItem(i) || i.hotelDetails?.id !== hotelDetailId) return i;
+        return { ...i, hotelDetails: { ...i.hotelDetails!, preferredStatus: status } };
+      }),
+    })));
+    fetch(`/api/hotels/${hotelDetailId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preferredStatus: status }),
+    }).catch(() => {});
+  }
+
+  function handleEliminationNoteChange(hotelDetailId: number, note: string | null) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => {
+        if (!isHotelItem(i) || i.hotelDetails?.id !== hotelDetailId) return i;
+        return { ...i, hotelDetails: { ...i.hotelDetails!, eliminationNote: note } };
+      }),
+    })));
+    fetch(`/api/hotels/${hotelDetailId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eliminationNote: note }),
+    }).catch(() => {});
+  }
+
+  function handleFamiliarityChange(hotelDetailId: number, score: number | null, date: string | null) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => {
+        if (!isHotelItem(i) || i.hotelDetails?.id !== hotelDetailId) return i;
+        return { ...i, hotelDetails: { ...i.hotelDetails!, familiarityScore: score, familiarityDate: date } };
+      }),
+    })));
+    fetch(`/api/hotels/${hotelDetailId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ familiarityScore: score, familiarityDate: date }),
     }).catch(() => {});
   }
 
@@ -1296,6 +1343,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                         onLocationScoreChange={handleLocationScoreChange}
                         onLocationScoreBlur={handleLocationScoreBlur}
                         onHoldExpiryChange={handleHoldExpiryChange}
+                        onPreferredStatusChange={handlePreferredStatusChange}
+                        onEliminationNoteChange={handleEliminationNoteChange}
+                        onFamiliarityChange={handleFamiliarityChange}
                         onCancellationFreeUntilChange={handleCancellationFreeUntilChange}
                         onVisaRequiredChange={handleVisaRequiredChange}
                         onSpecialRequestsChange={handleSpecialRequestsChange}

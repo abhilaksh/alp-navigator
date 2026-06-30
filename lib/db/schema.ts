@@ -190,6 +190,12 @@ export const hotelDetails = mysqlTable('hotel_details', {
   lng: real('lng'),
   serpData: text('serp_data'),              // full SerpAPI result JSON
   holdExpiresAt: date('hold_expires_at'),   // hold expiry for advance-purchase rates
+  // Phase 2 research fields
+  preferredStatus: varchar('preferred_status', { length: 20 }).default('none'),
+  // 'fora' | 'virtuoso' | 'both' | 'none'
+  eliminationNote: text('elimination_note'),           // "considered and cut" reason for this brief
+  familiarityScore: int('familiarity_score'),           // 1–5 advisor familiarity
+  familiarityDate: varchar('familiarity_date', { length: 10 }), // ISO date of last visit/FAM
 });
 
 // ─── Rates ────────────────────────────────────────────────────────────────────

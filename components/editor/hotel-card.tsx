@@ -29,6 +29,10 @@ export interface HotelDetailState {
   lng: number | null;
   googleRateInr: number | null;
   holdExpiresAt: string | null;
+  preferredStatus: string | null;  // 'fora' | 'virtuoso' | 'both' | 'none'
+  eliminationNote: string | null;
+  familiarityScore: number | null;  // 1–5
+  familiarityDate: string | null;   // ISO date of last visit/FAM
   foraPartner?: ForaPartnerInfo | null;
   rates: RateState[];
 }
@@ -63,6 +67,9 @@ interface HotelCardProps {
   onLocationScoreChange: (itemId: number, value: string) => void;
   onLocationScoreBlur: (hotelDetailId: number, value: string) => void;
   onHoldExpiryChange: (hotelDetailId: number, date: string | null) => void;
+  onPreferredStatusChange: (hotelDetailId: number, status: string) => void;
+  onEliminationNoteChange: (hotelDetailId: number, note: string | null) => void;
+  onFamiliarityChange: (hotelDetailId: number, score: number | null, date: string | null) => void;
   onCancellationFreeUntilChange: (itemId: number, date: string | null) => void;
   onVisaRequiredChange: (itemId: number, value: number) => void;
   onSpecialRequestsChange: (itemId: number, json: string) => void;
@@ -90,11 +97,13 @@ export function HotelCard({
   item, index,
   onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
-  onHoldExpiryChange, onCancellationFreeUntilChange, onVisaRequiredChange, onSpecialRequestsChange,
+  onHoldExpiryChange, onPreferredStatusChange, onEliminationNoteChange, onFamiliarityChange,
+  onCancellationFreeUntilChange, onVisaRequiredChange, onSpecialRequestsChange,
   onBookingStatusChange, onBookingRefChange, onRateExpiryChange,
 }: HotelCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingRemove, setPendingRemove] = useState(false);
+  const [showEliminationNote, setShowEliminationNote] = useState(false);
   const detail = item.hotelDetails;
   const badge = BADGE_LETTERS[index] ?? String(index + 1);
   const isComplete = detail?.rates.some(r => r.status === 'done') ?? false;
@@ -256,6 +265,24 @@ export function HotelCard({
             </span>
           ))}
 
+          {/* Preferred status badge */}
+          {detail && detail.preferredStatus && detail.preferredStatus !== 'none' && (
+            <span
+              className="font-sans text-[9px] font-semibold uppercase tracking-[0.06em] flex-shrink-0 px-[6px] py-[2px] rounded-[2px] cursor-pointer"
+              style={
+                detail.preferredStatus === 'fora'
+                  ? { background: 'rgba(169,139,82,0.15)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.35)' }
+                  : detail.preferredStatus === 'virtuoso'
+                  ? { background: 'rgba(30,58,47,0.12)', color: '#1E3A2F', border: '1px solid rgba(30,58,47,0.3)' }
+                  : { background: 'linear-gradient(90deg, rgba(169,139,82,0.15), rgba(30,58,47,0.12))', color: '#4A514B', border: '1px solid rgba(169,139,82,0.3)' }
+              }
+              title="Click to clear preferred status"
+              onClick={() => detail && onPreferredStatusChange(detail.id, 'none')}
+            >
+              {detail.preferredStatus === 'fora' ? 'Fora Pref' : detail.preferredStatus === 'virtuoso' ? 'Virtuoso' : 'Fora + Virtuoso'}
+            </span>
+          )}
+
           {/* Collapse toggle */}
           <button
             onClick={() => setCollapsed(v => !v)}
@@ -366,6 +393,105 @@ export function HotelCard({
                   />
                 </div>
               )}
+
+              {/* Preferred status selector */}
+              {detail && (
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[4px]">Preferred partner</div>
+                  <div className="flex gap-[5px]">
+                    {(['none', 'fora', 'virtuoso', 'both'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => onPreferredStatusChange(detail.id, s)}
+                        className="font-sans text-[9px] uppercase tracking-[0.05em] px-[6px] py-[2px] rounded-[2px] cursor-pointer transition-all"
+                        style={{
+                          background: detail.preferredStatus === s
+                            ? (s === 'fora' ? 'rgba(169,139,82,0.2)' : s === 'virtuoso' ? 'rgba(30,58,47,0.15)' : s === 'both' ? 'rgba(169,139,82,0.12)' : 'rgba(22,26,23,0.07)')
+                            : 'rgba(22,26,23,0.04)',
+                          color: detail.preferredStatus === s
+                            ? (s === 'fora' ? '#A98B52' : s === 'virtuoso' ? '#1E3A2F' : s === 'both' ? '#4A514B' : '#8A9189')
+                            : '#8A9189',
+                          border: `1px solid ${detail.preferredStatus === s
+                            ? (s === 'fora' ? 'rgba(169,139,82,0.4)' : s === 'virtuoso' ? 'rgba(30,58,47,0.35)' : s === 'both' ? 'rgba(169,139,82,0.3)' : 'rgba(22,26,23,0.12)')
+                            : 'transparent'}`,
+                          fontWeight: detail.preferredStatus === s ? 600 : 400,
+                        }}
+                      >
+                        {s === 'none' ? '—' : s === 'fora' ? 'Fora' : s === 'virtuoso' ? 'Virtuoso' : 'Both'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Familiarity score + date */}
+              {detail && (
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[4px]">Familiarity</div>
+                  <div className="flex items-center gap-[10px]">
+                    <div className="flex gap-[4px]">
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => onFamiliarityChange(detail.id, detail.familiarityScore === n ? null : n, detail.familiarityDate)}
+                          className="cursor-pointer transition-all"
+                          style={{
+                            fontSize: 14,
+                            color: (detail.familiarityScore ?? 0) >= n ? '#A98B52' : '#C9D2CC',
+                            lineHeight: 1,
+                            background: 'none',
+                            border: 'none',
+                            padding: '0 1px',
+                          }}
+                          title={`Familiarity: ${n}/5`}
+                        >●</button>
+                      ))}
+                    </div>
+                    <input
+                      type="date"
+                      value={detail.familiarityDate ?? ''}
+                      onChange={e => onFamiliarityChange(detail.id, detail.familiarityScore, e.target.value || null)}
+                      className="font-mono text-[10px] text-ink-mute bg-transparent border-none outline-none p-0 transition-colors"
+                      style={{ borderBottom: '1px solid transparent', colorScheme: 'light' }}
+                      onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
+                      onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                      title="Date of last visit or FAM trip"
+                    />
+                    {detail.familiarityDate && (
+                      <span className="font-mono text-[9px] text-ink-mute">visited</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Elimination note */}
+              {detail && (detail.eliminationNote || showEliminationNote) ? (
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[3px]">Cut because…</div>
+                  <textarea
+                    value={detail.eliminationNote ?? ''}
+                    onChange={e => onEliminationNoteChange(detail.id, e.target.value || null)}
+                    rows={2}
+                    placeholder="Why this property was considered and cut…"
+                    className="w-full bg-transparent border-none outline-none font-sans text-xs text-ink-soft leading-[1.65] resize-none py-0 pl-[7px] min-h-[34px] transition-colors placeholder:text-ink-mute placeholder:italic"
+                    style={{ borderLeft: '2px solid rgba(139,47,47,0.25)', transition: 'border-color 0.14s' }}
+                    onFocus={e => (e.currentTarget.style.borderLeftColor = 'rgba(139,47,47,0.6)')}
+                    onBlur={e => {
+                      e.currentTarget.style.borderLeftColor = 'rgba(139,47,47,0.25)';
+                      if (!e.currentTarget.value) setShowEliminationNote(false);
+                    }}
+                    autoFocus={showEliminationNote && !detail.eliminationNote}
+                  />
+                </div>
+              ) : detail ? (
+                <button
+                  onClick={() => setShowEliminationNote(true)}
+                  className="text-[10px] font-sans text-ink-mute hover:text-ink-soft transition-colors text-left"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                >
+                  + Add elimination note
+                </button>
+              ) : null}
 
               {/* Cancellation free until + visa required + booking status */}
               <div className="flex gap-[18px] flex-wrap">
