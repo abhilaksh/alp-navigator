@@ -13,6 +13,7 @@ import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
 import { BookingsPanel } from '@/components/editor/bookings-panel';
 import { ChecklistPanel } from '@/components/editor/checklist-panel';
 import { ShareModal } from '@/components/editor/share-modal';
+import { ClientContextPanel } from '@/components/editor/client-context-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -173,6 +174,10 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const clientName  = initialTrip.client?.name ?? null;
   const clientEmail = (initialTrip.client as { email?: string | null } | null)?.email ?? null;
   const clientWa    = (initialTrip.client as { whatsapp?: string | null } | null)?.whatsapp ?? null;
+  const clientId    = initialTrip.client?.id ?? null;
+  const clientPreferencesRaw = (initialTrip.client as { preferences?: string | null } | null)?.preferences ?? null;
+  const clientPassportExpiry = (initialTrip.client as { passportExpiry?: string | null } | null)?.passportExpiry ?? null;
+  const clientNationality    = (initialTrip.client as { nationality?: string | null } | null)?.nationality ?? null;
 
   const expiringHolds = hotelItems.filter(h => {
     const exp = h.hotelDetails?.holdExpiresAt;
@@ -961,6 +966,19 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   onFocus={e => (e.currentTarget.rows = 3)}
                   onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 1; }}
                 />
+              )}
+
+              {/* Client context (preferences + passport) */}
+              {clientId && (
+                <div className="mb-[18px]">
+                  <ClientContextPanel
+                    clientId={clientId}
+                    clientName={clientName}
+                    clientPreferencesRaw={clientPreferencesRaw}
+                    passportExpiry={clientPassportExpiry}
+                    nationality={clientNationality}
+                  />
+                </div>
               )}
 
               {/* Hold expiry warning banner */}
