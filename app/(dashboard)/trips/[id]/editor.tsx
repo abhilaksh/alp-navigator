@@ -16,6 +16,7 @@ import { ShareModal } from '@/components/editor/share-modal';
 import { ClientContextPanel } from '@/components/editor/client-context-panel';
 import { PaymentPanel } from '@/components/editor/payment-panel';
 import { VersionHistoryPanel } from '@/components/editor/version-history-panel';
+import { ChangeRequestsPanel } from '@/components/editor/change-requests-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -162,7 +163,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
-  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment'>('editor');
+  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes'>('editor');
+  const [changeRequestOpenCount, setChangeRequestOpenCount] = useState(0);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [showShare, setShowShare]   = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
@@ -952,6 +954,30 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
           )}
         </button>
+
+        {/* Changes tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'changes' ? 'editor' : 'changes')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'changes' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'changes' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Revisions
+          {changeRequestOpenCount > 0 && (
+            <span
+              className="font-mono text-[9px] px-[5px] py-[1px] rounded-full"
+              style={{ background: 'rgba(169,139,82,0.15)', color: '#A98B52' }}
+            >
+              {changeRequestOpenCount}
+            </span>
+          )}
+          {activeView === 'changes' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
       </nav>
 
       {/* Main editor body */}
@@ -998,6 +1024,16 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                 paymentDataRaw={(initialTrip as { paymentData?: string | null }).paymentData ?? null}
               />
             </div>
+          </div>
+        )}
+
+        {/* Changes (revision requests) view */}
+        {activeView === 'changes' && (
+          <div className="flex-1 overflow-y-auto" style={{ background: '#F6F4EE' }}>
+            <ChangeRequestsPanel
+              tripId={id}
+              openCount={setChangeRequestOpenCount}
+            />
           </div>
         )}
 

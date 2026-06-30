@@ -224,6 +224,23 @@ export const tripSnapshots = mysqlTable('trip_snapshots', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// ─── Change Requests (client revision feedback per proposal) ─────────────────
+// Logged whenever a client asks for a change to a sent or in-revision proposal.
+// Category classifies the type of change so the advisor can triage and track.
+
+export const changeRequests = mysqlTable('change_requests', {
+  id: int('id').autoincrement().primaryKey(),
+  tripId: int('trip_id').notNull().references(() => trips.id, { onDelete: 'cascade' }),
+  snapshotVersion: int('snapshot_version'),        // proposal version this feedback responds to (nullable)
+  category: varchar('category', { length: 30 }).notNull().default('other'),
+  // 'hotel_swap' | 'date_change' | 'activity_add' | 'budget_adjust' | 'other'
+  text: text('text').notNull(),                    // free-form client feedback text
+  status: varchar('status', { length: 20 }).notNull().default('open'),
+  // 'open' | 'implemented' | 'noted'
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 // ─── Itinerary (day-by-day guide) ─────────────────────────────────────────────
 // Optional rich day-by-day planner and city guide layer. Separate from the
 // trip_items booking layer — this is the narrative/guide layer.
@@ -294,10 +311,15 @@ export const tripsRelations = relations(trips, ({ one, many }) => ({
   items: many(tripItems),
   itineraryDays: many(itineraryDays),
   snapshots: many(tripSnapshots),
+  changeRequests: many(changeRequests),
 }));
 
 export const tripSnapshotsRelations = relations(tripSnapshots, ({ one }) => ({
   trip: one(trips, { fields: [tripSnapshots.tripId], references: [trips.id] }),
+}));
+
+export const changeRequestsRelations = relations(changeRequests, ({ one }) => ({
+  trip: one(trips, { fields: [changeRequests.tripId], references: [trips.id] }),
 }));
 
 export const destinationsRelations = relations(destinations, ({ one, many }) => ({
@@ -360,6 +382,8 @@ export type ItineraryDay = typeof itineraryDays.$inferSelect;
 export type ItineraryBlock = typeof itineraryBlocks.$inferSelect;
 export type TripSnapshot = typeof tripSnapshots.$inferSelect;
 export type NewTripSnapshot = typeof tripSnapshots.$inferInsert;
+export type ChangeRequest = typeof changeRequests.$inferSelect;
+export type NewChangeRequest = typeof changeRequests.$inferInsert;
 
 // Required by auth middleware
 export type TeamDataWithMembers = Team & {
