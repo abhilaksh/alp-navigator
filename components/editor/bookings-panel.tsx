@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import type { DestinationState } from '@/app/(dashboard)/trips/[id]/types';
 import type { HotelItemState } from './hotel-card';
 import { isHotelItem } from '@/app/(dashboard)/trips/[id]/editor-utils';
+import { ConfirmationParser } from './confirmation-parser';
 
 type BookingStatus = 'researching' | 'quoted' | 'confirmed' | 'cancelled';
 
@@ -56,9 +58,11 @@ interface BookingsPanelProps {
   destinations: DestinationState[];
   onStatusChange: (itemId: number, status: string) => void;
   onBookingRefChange: (itemId: number, ref: string) => void;
+  onBookingConfirmed?: (itemId: number, data: { bookingRef?: string; bookingStatus?: string; confirmedTotalInr?: number; cancellationFreeUntil?: string }) => void;
 }
 
-export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange }: BookingsPanelProps) {
+export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange, onBookingConfirmed }: BookingsPanelProps) {
+  const [parserOpen, setParserOpen] = useState<{ itemId: number; hotelName: string } | null>(null);
   // Flatten all hotel items with their destination context
   const rows: Array<{ dest: DestinationState; hotel: HotelItemState }> = [];
   for (const dest of destinations) {
@@ -107,7 +111,18 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
 
   return (
     <div className="flex-1 overflow-y-auto bg-paper" style={{ scrollbarWidth: 'thin', scrollbarColor: '#C9D2CC transparent' }}>
-      <div className="max-w-3xl mx-auto px-6 py-7">
+      {parserOpen && (
+        <ConfirmationParser
+          itemId={parserOpen.itemId}
+          hotelName={parserOpen.hotelName}
+          onSave={data => {
+            onBookingConfirmed?.(parserOpen.itemId, data);
+            if (data.bookingRef) onBookingRefChange(parserOpen.itemId, data.bookingRef);
+            if (data.bookingStatus) onStatusChange(parserOpen.itemId, data.bookingStatus);
+          }}
+          onClose={() => setParserOpen(null)}
+        />
+      )}      <div className="max-w-3xl mx-auto px-6 py-7">
 
         {/* Alert banners */}
         {urgentCancels.length > 0 && (
@@ -143,12 +158,12 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
           <div
             className="grid px-4 py-2"
             style={{
-              gridTemplateColumns: '1fr 2fr 1fr 1fr 1fr',
+              gridTemplateColumns: '1fr 2fr 1fr 1fr 1fr auto',
               borderBottom: '1px solid rgba(22,26,23,0.07)',
               background: 'rgba(22,26,23,0.02)',
             }}
           >
-            {['Destination', 'Hotel', 'Status', 'Booking ref', 'Deadlines'].map(h => (
+            {['Destination', 'Hotel', 'Status', 'Booking ref', 'Deadlines', ''].map(h => (
               <span key={h} className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute">{h}</span>
             ))}
           </div>
@@ -168,7 +183,7 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
                 key={hotel.id}
                 className="grid items-start px-4 py-3 group hover:bg-paper transition-colors"
                 style={{
-                  gridTemplateColumns: '1fr 2fr 1fr 1fr 1fr',
+                  gridTemplateColumns: '1fr 2fr 1fr 1fr 1fr auto',
                   borderBottom: ri < rows.length - 1 ? '1px solid rgba(22,26,23,0.05)' : 'none',
                 }}
               >
@@ -238,6 +253,18 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
                       Hold: {hotel.hotelDetails.holdExpiresAt}
                     </span>
                   )}
+                </div>
+
+                {/* Parse confirmation button */}
+                <div className="flex items-start pt-0.5">
+                  <button
+                    onClick={() => setParserOpen({ itemId: hotel.id, hotelName: hotel.title })}
+                    className="font-mono text-[8px] uppercase tracking-[0.06em] px-2 py-[3px] rounded-[2px] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
+                    style={{ background: 'rgba(30,58,47,0.08)', color: '#1E3A2F', border: '1px solid rgba(30,58,47,0.2)' }}
+                    title="Paste confirmation email to extract booking details"
+                  >
+                    ✦ Parse
+                  </button>
                 </div>
               </div>
             );

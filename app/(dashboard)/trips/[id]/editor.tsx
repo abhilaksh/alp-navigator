@@ -537,6 +537,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }).catch(() => {});
   }
 
+  function handleBookingConfirmed(itemId: number, data: {
+    bookingRef?: string; bookingStatus?: string;
+    confirmedTotalInr?: number; cancellationFreeUntil?: string;
+  }) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => i.id !== itemId ? i : {
+        ...i,
+        ...(data.bookingRef && { bookingRef: data.bookingRef }),
+        ...(data.bookingStatus && { bookingStatus: data.bookingStatus }),
+        ...(data.confirmedTotalInr && { confirmedTotalInr: data.confirmedTotalInr }),
+        ...(data.cancellationFreeUntil && { cancellationFreeUntil: data.cancellationFreeUntil }),
+      }),
+    })));
+  }
+
   // ─── Rate mutations ──────────────────────────────────────────────────────────
   async function handleAddRate(hotelDetailId: number) {
     const res = await fetch('/api/rates', {
@@ -862,6 +878,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             destinations={destinations}
             onStatusChange={handleBookingStatusChange}
             onBookingRefChange={handleBookingRefChange}
+            onBookingConfirmed={handleBookingConfirmed}
           />
         )}
 
