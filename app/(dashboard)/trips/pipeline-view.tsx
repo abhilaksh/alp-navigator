@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { List, LayoutGrid, AlertTriangle, Clock } from 'lucide-react';
+import { List, LayoutGrid, AlertTriangle, Clock, Copy } from 'lucide-react';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -92,99 +93,127 @@ function TripCard({ trip, compact = false }: { trip: PipelineTrip; compact?: boo
   const holdUrg = holdUrgency(trip.minHoldExpiry);
   const followUp = followUpState(trip);
   const hasBadges = holdUrg || followUp;
+  const router = useRouter();
+  const [duplicating, setDuplicating] = useState(false);
+
+  const handleDuplicate = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/trips/${trip.id}/duplicate`, { method: 'POST' });
+      const data = await res.json();
+      if (data.tripId) router.push(`/trips/${data.tripId}`);
+    } finally {
+      setDuplicating(false);
+    }
+  }, [trip.id, router]);
 
   return (
-    <Link
-      href={`/trips/${trip.id}`}
-      className="group block rounded-[5px] bg-white transition-all"
+    <div
+      className="group relative rounded-[5px] bg-white transition-all"
       style={{
         border: '1px solid rgba(22,26,23,0.09)',
         boxShadow: '0 1px 3px rgba(22,26,23,0.04)',
         transition: 'border-color 0.14s, box-shadow 0.14s, transform 0.14s',
       }}
       onMouseEnter={e => {
-        const el = e.currentTarget as HTMLAnchorElement;
+        const el = e.currentTarget as HTMLDivElement;
         el.style.borderColor = 'rgba(169,139,82,0.35)';
         el.style.boxShadow = '0 4px 14px rgba(22,26,23,0.08)';
         el.style.transform = 'translateY(-1px)';
       }}
       onMouseLeave={e => {
-        const el = e.currentTarget as HTMLAnchorElement;
+        const el = e.currentTarget as HTMLDivElement;
         el.style.borderColor = 'rgba(22,26,23,0.09)';
         el.style.boxShadow = '0 1px 3px rgba(22,26,23,0.04)';
         el.style.transform = '';
       }}
     >
-      <div className={compact ? 'px-3 py-2.5' : 'px-4 py-3.5'}>
-        {/* Name row */}
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <span className={`font-display text-ink leading-snug group-hover:text-spruce transition-colors ${compact ? 'text-[13px]' : 'text-[15px]'}`}>
-            {trip.label}
-          </span>
-          {!compact && (
-            <span
-              className="text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-sm flex-shrink-0"
-              style={{ background: meta.bg, color: meta.color, border: `1px solid ${meta.border}` }}
-            >
-              {meta.label}
-            </span>
-          )}
-        </div>
+      {/* Duplicate button — shown on hover */}
+      <button
+        onClick={handleDuplicate}
+        disabled={duplicating}
+        title="Duplicate trip"
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 rounded-[3px] text-[10px] font-sans z-10"
+        style={{ background: 'rgba(22,26,23,0.07)', color: '#4A514B', cursor: duplicating ? 'not-allowed' : 'pointer' }}
+      >
+        <Copy size={10} />
+        {duplicating ? '…' : 'Copy'}
+      </button>
 
-        {/* Meta row */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {trip.clientName && (
-            <span className="text-[11px] text-ink-soft font-sans">{trip.clientName}</span>
-          )}
-          {trip.clientName && (trip.destinationCount ?? 0) > 0 && (
-            <span className="text-ink-mute text-[10px]">·</span>
-          )}
-          {(trip.destinationCount ?? 0) > 0 && (
-            <span className="text-[11px] text-ink-mute font-sans">
-              {trip.destinationCount} dest{trip.destinationCount !== 1 ? 's' : ''}
+      <Link href={`/trips/${trip.id}`} className="block">
+        <div className={compact ? 'px-3 py-2.5' : 'px-4 py-3.5'}>
+          {/* Name row */}
+          <div className="flex items-start justify-between gap-2 mb-1 pr-14">
+            <span className={`font-display text-ink leading-snug group-hover:text-spruce transition-colors ${compact ? 'text-[13px]' : 'text-[15px]'}`}>
+              {trip.label}
             </span>
-          )}
-          {trip.totalFromInr != null && (
-            <>
-              <span className="text-ink-mute text-[10px]">·</span>
-              <span className="font-mono text-[11px] text-brass">{inr(trip.totalFromInr)}</span>
-            </>
-          )}
-          <span className="ml-auto text-[10px] text-ink-mute font-sans">{relativeDate(trip.updatedAt)}</span>
-        </div>
-
-        {/* Alert chips */}
-        {hasBadges && (
-          <div className="flex gap-1.5 mt-2 flex-wrap">
-            {holdUrg === 'critical' && trip.minHoldExpiry && (
-              <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }}>
-                <Clock size={9} /> {holdLabel(trip.minHoldExpiry)}
-              </span>
-            )}
-            {holdUrg === 'warning' && trip.minHoldExpiry && (
-              <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.09)', color: '#b45309', border: '1px solid rgba(217,119,6,0.22)' }}>
-                <Clock size={9} /> {holdLabel(trip.minHoldExpiry)}
-              </span>
-            )}
-            {followUp === 'red' && (
-              <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }}>
-                <AlertTriangle size={9} /> No view · {sentAgo(trip)} — follow up
-              </span>
-            )}
-            {followUp === 'amber' && (
-              <span className="inline-flex items-center gap-1 text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.09)', color: '#b45309', border: '1px solid rgba(217,119,6,0.22)' }}>
-                <AlertTriangle size={9} /> No view · {sentAgo(trip)}
-              </span>
-            )}
-            {followUp === 'cold' && (
-              <span className="inline-flex items-center gap-1 text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.07)', color: '#92400e', border: '1px solid rgba(217,119,6,0.18)' }}>
-                <AlertTriangle size={9} /> Proposal going cold
+            {!compact && (
+              <span
+                className="text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-sm flex-shrink-0"
+                style={{ background: meta.bg, color: meta.color, border: `1px solid ${meta.border}` }}
+              >
+                {meta.label}
               </span>
             )}
           </div>
-        )}
-      </div>
-    </Link>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {trip.clientName && (
+              <span className="text-[11px] text-ink-soft font-sans">{trip.clientName}</span>
+            )}
+            {trip.clientName && (trip.destinationCount ?? 0) > 0 && (
+              <span className="text-ink-mute text-[10px]">·</span>
+            )}
+            {(trip.destinationCount ?? 0) > 0 && (
+              <span className="text-[11px] text-ink-mute font-sans">
+                {trip.destinationCount} dest{trip.destinationCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {trip.totalFromInr != null && (
+              <>
+                <span className="text-ink-mute text-[10px]">·</span>
+                <span className="font-mono text-[11px] text-brass">{inr(trip.totalFromInr)}</span>
+              </>
+            )}
+            <span className="ml-auto text-[10px] text-ink-mute font-sans">{relativeDate(trip.updatedAt)}</span>
+          </div>
+
+          {/* Alert chips */}
+          {hasBadges && (
+            <div className="flex gap-1.5 mt-2 flex-wrap">
+              {holdUrg === 'critical' && trip.minHoldExpiry && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }}>
+                  <Clock size={9} /> {holdLabel(trip.minHoldExpiry)}
+                </span>
+              )}
+              {holdUrg === 'warning' && trip.minHoldExpiry && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.09)', color: '#b45309', border: '1px solid rgba(217,119,6,0.22)' }}>
+                  <Clock size={9} /> {holdLabel(trip.minHoldExpiry)}
+                </span>
+              )}
+              {followUp === 'red' && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(220,38,38,0.09)', color: '#b91c1c', border: '1px solid rgba(220,38,38,0.22)' }}>
+                  <AlertTriangle size={9} /> No view · {sentAgo(trip)} — follow up
+                </span>
+              )}
+              {followUp === 'amber' && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.09)', color: '#b45309', border: '1px solid rgba(217,119,6,0.22)' }}>
+                  <AlertTriangle size={9} /> No view · {sentAgo(trip)}
+                </span>
+              )}
+              {followUp === 'cold' && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-sans font-medium px-[5px] py-[2px] rounded-sm" style={{ background: 'rgba(217,119,6,0.07)', color: '#92400e', border: '1px solid rgba(217,119,6,0.18)' }}>
+                  <AlertTriangle size={9} /> Proposal going cold
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </Link>
+    </div>
   );
 }
 
