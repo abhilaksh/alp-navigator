@@ -33,6 +33,9 @@ export interface HotelDetailState {
   eliminationNote: string | null;
   familiarityScore: number | null;  // 1–5
   familiarityDate: string | null;   // ISO date of last visit/FAM
+  commissionPct: number | null;     // expected commission %
+  commissionAmountInr: number | null;
+  commissionPaidAt: string | null;  // ISO date, null = not yet received
   foraPartner?: ForaPartnerInfo | null;
   rates: RateState[];
 }
@@ -70,6 +73,7 @@ interface HotelCardProps {
   onPreferredStatusChange: (hotelDetailId: number, status: string) => void;
   onEliminationNoteChange: (hotelDetailId: number, note: string | null) => void;
   onFamiliarityChange: (hotelDetailId: number, score: number | null, date: string | null) => void;
+  onCommissionChange: (hotelDetailId: number, pct: number | null, amountInr: number | null, paidAt: string | null) => void;
   onCancellationFreeUntilChange: (itemId: number, date: string | null) => void;
   onVisaRequiredChange: (itemId: number, value: number) => void;
   onSpecialRequestsChange: (itemId: number, json: string) => void;
@@ -98,6 +102,7 @@ export function HotelCard({
   onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
   onHoldExpiryChange, onPreferredStatusChange, onEliminationNoteChange, onFamiliarityChange,
+  onCommissionChange,
   onCancellationFreeUntilChange, onVisaRequiredChange, onSpecialRequestsChange,
   onBookingStatusChange, onBookingRefChange, onRateExpiryChange,
 }: HotelCardProps) {
@@ -492,6 +497,80 @@ export function HotelCard({
                   + Add elimination note
                 </button>
               ) : null}
+
+              {/* Commission tracking */}
+              {detail && item.bookingStatus !== 'researching' && (
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-[4px]">Commission</div>
+                  <div className="flex items-center gap-[12px] flex-wrap">
+                    <div className="flex items-baseline gap-[4px]">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min={0}
+                        max={100}
+                        value={detail.commissionPct ?? ''}
+                        onChange={e => {
+                          const pct = e.target.value ? parseFloat(e.target.value) : null;
+                          // auto-calc amount from best parsed rate total
+                          const doneRate = detail.rates.find(r => r.status === 'done');
+                          let autoAmount: number | null = null;
+                          if (pct && doneRate?.parsedData) {
+                            try {
+                              const p = JSON.parse(doneRate.parsedData);
+                              if (p.total_inr) autoAmount = Math.round(p.total_inr * pct / 100);
+                            } catch { /* no-op */ }
+                          }
+                          onCommissionChange(detail.id, pct, autoAmount ?? detail.commissionAmountInr, detail.commissionPaidAt);
+                        }}
+                        placeholder="—"
+                        className="font-mono text-[13px] text-ink-soft bg-transparent border-none outline-none w-[38px] p-0 transition-colors"
+                        style={{ borderBottom: '1px solid transparent' }}
+                        onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
+                        onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                      />
+                      <span className="font-mono text-[9px] text-ink-mute">%</span>
+                    </div>
+                    {detail.commissionPct && (
+                      <div className="flex items-baseline gap-[4px]">
+                        <input
+                          type="number"
+                          value={detail.commissionAmountInr ?? ''}
+                          onChange={e => onCommissionChange(detail.id, detail.commissionPct, e.target.value ? parseInt(e.target.value) : null, detail.commissionPaidAt)}
+                          placeholder="₹—"
+                          className="font-mono text-[13px] text-ink-soft bg-transparent border-none outline-none w-[80px] p-0 transition-colors"
+                          style={{ borderBottom: '1px solid transparent' }}
+                          onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
+                          onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                        />
+                        <span className="font-mono text-[9px] text-ink-mute">INR</span>
+                      </div>
+                    )}
+                    {detail.commissionPct && (
+                      <div className="flex items-baseline gap-[4px]">
+                        <span className="font-mono text-[9px] uppercase tracking-[0.05em] text-ink-mute">Rcvd</span>
+                        <input
+                          type="date"
+                          value={detail.commissionPaidAt ?? ''}
+                          onChange={e => onCommissionChange(detail.id, detail.commissionPct, detail.commissionAmountInr, e.target.value || null)}
+                          className="font-mono text-[11px] text-ink-soft bg-transparent border-none outline-none p-0 transition-colors"
+                          style={{ borderBottom: '1px solid transparent', colorScheme: 'light' }}
+                          onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
+                          onBlur={e => (e.currentTarget.style.borderBottomColor = 'transparent')}
+                        />
+                        {detail.commissionPaidAt && (
+                          <span
+                            className="font-mono text-[9px] px-[5px] py-px rounded-[2px]"
+                            style={{ background: 'rgba(46,107,69,0.1)', color: '#2E6B45' }}
+                          >
+                            Paid
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Cancellation free until + visa required + booking status */}
               <div className="flex gap-[18px] flex-wrap">

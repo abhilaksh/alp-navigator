@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { name, recommendation, locationScore, lat, lng, sortOrder, holdExpiresAt, preferredStatus, eliminationNote, familiarityScore, familiarityDate } = body;
+  const { name, recommendation, locationScore, lat, lng, sortOrder, holdExpiresAt, preferredStatus, eliminationNote, familiarityScore, familiarityDate, commissionPct, commissionAmountInr, commissionPaidAt } = body;
 
   // Update tripItems fields
   const itemUpdates: Record<string, unknown> = { updatedAt: new Date() };
@@ -43,6 +43,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (eliminationNote !== undefined) detailUpdates.eliminationNote = eliminationNote || null;
   if (familiarityScore !== undefined) detailUpdates.familiarityScore = familiarityScore || null;
   if (familiarityDate !== undefined) detailUpdates.familiarityDate = familiarityDate || null;
+  if (commissionPct !== undefined) detailUpdates.commissionPct = commissionPct ?? null;
+  if (commissionAmountInr !== undefined) detailUpdates.commissionAmountInr = commissionAmountInr ?? null;
+  if (commissionPaidAt !== undefined) detailUpdates.commissionPaidAt = commissionPaidAt || null;
 
   if (Object.keys(detailUpdates).length > 0) {
     await db.update(hotelDetails).set(detailUpdates).where(eq(hotelDetails.id, hotelDetailId));

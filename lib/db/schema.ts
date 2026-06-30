@@ -196,6 +196,10 @@ export const hotelDetails = mysqlTable('hotel_details', {
   eliminationNote: text('elimination_note'),           // "considered and cut" reason for this brief
   familiarityScore: int('familiarity_score'),           // 1–5 advisor familiarity
   familiarityDate: varchar('familiarity_date', { length: 10 }), // ISO date of last visit/FAM
+  // Commission tracking
+  commissionPct: real('commission_pct'),                // expected commission % (e.g. 10, 12.5)
+  commissionAmountInr: int('commission_amount_inr'),    // calculated or overridden INR amount
+  commissionPaidAt: varchar('commission_paid_at', { length: 10 }), // ISO date, null = not yet received
 });
 
 // ─── Rates ────────────────────────────────────────────────────────────────────

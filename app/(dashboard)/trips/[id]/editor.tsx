@@ -450,7 +450,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           thumbnail: hotel.thumbnail, lat: hotel.lat ?? null,
           lng: hotel.lng ?? null, googleRateInr: hotel.googleRateInr,
           holdExpiresAt: null, preferredStatus: null, eliminationNote: null,
-          familiarityScore: null, familiarityDate: null, foraPartner, rates: [],
+          familiarityScore: null, familiarityDate: null,
+          commissionPct: null, commissionAmountInr: null, commissionPaidAt: null,
+          foraPartner, rates: [],
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
@@ -476,7 +478,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           recommendation: null, foraId: null, hotelWebsite: null,
           thumbnail: null, lat: null, lng: null, googleRateInr: null,
           holdExpiresAt: null, preferredStatus: null, eliminationNote: null,
-          familiarityScore: null, familiarityDate: null, rates: [],
+          familiarityScore: null, familiarityDate: null,
+          commissionPct: null, commissionAmountInr: null, commissionPaidAt: null,
+          rates: [],
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
@@ -602,6 +606,21 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ familiarityScore: score, familiarityDate: date }),
+    }).catch(() => {});
+  }
+
+  function handleCommissionChange(hotelDetailId: number, pct: number | null, amountInr: number | null, paidAt: string | null) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => {
+        if (!isHotelItem(i) || i.hotelDetails?.id !== hotelDetailId) return i;
+        return { ...i, hotelDetails: { ...i.hotelDetails!, commissionPct: pct, commissionAmountInr: amountInr, commissionPaidAt: paidAt } };
+      }),
+    })));
+    fetch(`/api/hotels/${hotelDetailId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commissionPct: pct, commissionAmountInr: amountInr, commissionPaidAt: paidAt }),
     }).catch(() => {});
   }
 
@@ -827,6 +846,24 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       body: JSON.stringify({ totalFromInr }),
     }).catch(() => {});
   }, [totalFromInr, id]);
+
+  const commissionSummary = useMemo(() => {
+    let expected = 0;
+    let received = 0;
+    let count = 0;
+    for (const dest of destinations) {
+      for (const item of dest.items) {
+        if (!isHotelItem(item) || !item.hotelDetails) continue;
+        const d = item.hotelDetails;
+        if (d.commissionAmountInr) {
+          expected += d.commissionAmountInr;
+          count++;
+          if (d.commissionPaidAt) received += d.commissionAmountInr;
+        }
+      }
+    }
+    return count > 0 ? { expected, received, count } : null;
+  }, [destinations]);
 
   const addedHotelIds = new Set(
     hotelItems.flatMap(i => {
@@ -1104,6 +1141,38 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                 totalFromInr={totalFromInr}
                 paymentDataRaw={(initialTrip as { paymentData?: string | null }).paymentData ?? null}
               />
+
+              {/* Commission summary */}
+              {commissionSummary && (
+                <div className="mt-6 rounded-[6px] p-5" style={{ background: '#EDEAE1', border: '1px solid rgba(22,26,23,0.08)' }}>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-ink-mute mb-4">Commission summary</div>
+                  <div className="flex gap-8">
+                    <div>
+                      <div className="font-mono text-[11px] text-ink-mute mb-[3px]">Expected</div>
+                      <div className="font-mono text-[18px] text-ink">
+                        ₹{commissionSummary.expected.toLocaleString('en-IN')}
+                      </div>
+                      <div className="font-sans text-[10px] text-ink-mute mt-[2px]">
+                        across {commissionSummary.count} hotel{commissionSummary.count !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-mono text-[11px] text-ink-mute mb-[3px]">Received</div>
+                      <div
+                        className="font-mono text-[18px]"
+                        style={{ color: commissionSummary.received > 0 ? '#2E6B45' : '#8A9189' }}
+                      >
+                        ₹{commissionSummary.received.toLocaleString('en-IN')}
+                      </div>
+                      {commissionSummary.received < commissionSummary.expected && (
+                        <div className="font-sans text-[10px] mt-[2px]" style={{ color: '#A98B52' }}>
+                          ₹{(commissionSummary.expected - commissionSummary.received).toLocaleString('en-IN')} pending
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1373,6 +1442,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                         onPreferredStatusChange={handlePreferredStatusChange}
                         onEliminationNoteChange={handleEliminationNoteChange}
                         onFamiliarityChange={handleFamiliarityChange}
+                        onCommissionChange={handleCommissionChange}
                         onCancellationFreeUntilChange={handleCancellationFreeUntilChange}
                         onVisaRequiredChange={handleVisaRequiredChange}
                         onSpecialRequestsChange={handleSpecialRequestsChange}

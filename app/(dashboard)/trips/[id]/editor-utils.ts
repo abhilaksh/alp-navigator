@@ -34,6 +34,9 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
             eliminationNote: (i.hotelDetails as { eliminationNote?: string | null }).eliminationNote ?? null,
             familiarityScore: (i.hotelDetails as { familiarityScore?: number | null }).familiarityScore ?? null,
             familiarityDate: (i.hotelDetails as { familiarityDate?: string | null }).familiarityDate ?? null,
+            commissionPct: (i.hotelDetails as { commissionPct?: number | null }).commissionPct ?? null,
+            commissionAmountInr: (i.hotelDetails as { commissionAmountInr?: number | null }).commissionAmountInr ?? null,
+            commissionPaidAt: (i.hotelDetails as { commissionPaidAt?: string | null }).commissionPaidAt ?? null,
             foraPartner: (i.hotelDetails as { foraPartner?: unknown }).foraPartner ?? null,
             rates: (i.hotelDetails.rates ?? []).map(r => ({
               ...r,
