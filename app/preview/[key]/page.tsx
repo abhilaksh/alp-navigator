@@ -159,7 +159,18 @@ export default async function PreviewPage({ params }: Props) {
       </header>
 
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <div style={{ background: '#1E3A2F' }}>
+      <div
+        style={{
+          background: '#1E3A2F',
+          ...((trip as { heroImage?: string | null }).heroImage
+            ? {
+                backgroundImage: `linear-gradient(to bottom, rgba(30,58,47,0.82) 0%, rgba(30,58,47,0.72) 100%), url(${(trip as { heroImage?: string | null }).heroImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }
+            : {}),
+        }}
+      >
         <div className="max-w-3xl mx-auto px-6 py-14 md:py-20">
           <p
             className="text-[10px] uppercase tracking-[0.18em] mb-4"
@@ -298,8 +309,24 @@ export default async function PreviewPage({ params }: Props) {
 
         {destinations.map((dest, di) => {
           const hotels = (dest.items ?? []).filter(i => i.type === 'hotel');
+          const destHeroImage = (dest as { heroImage?: string | null }).heroImage ?? null;
           return (
             <section key={dest.id}>
+              {/* Destination hero image */}
+              {destHeroImage && (
+                <div
+                  className="w-full h-[220px] md:h-[280px] rounded-[4px] overflow-hidden mb-8"
+                  style={{ border: '1px solid rgba(22,26,23,0.06)' }}
+                >
+                  <img
+                    src={destHeroImage}
+                    alt={dest.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+
               {/* Destination header */}
               <div className="flex items-start gap-5 mb-10">
                 <span

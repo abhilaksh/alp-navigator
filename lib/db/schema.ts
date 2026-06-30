@@ -97,6 +97,7 @@ export const trips = mysqlTable('trips', {
   notes: text('notes'),             // internal advisor notes
   personalNote: text('personal_note'),     // client-facing personal note (advisor-written, top of proposal)
   journeyOverview: text('journey_overview'), // narrative overview of the trip arc (AI-assisted)
+  heroImage: text('hero_image'),            // URL for the proposal cover photo (shown in preview hero)
   // Exchange rate lock — documents the USD→INR rate used when building this quote
   fxDate: varchar('fx_date', { length: 10 }),
   fxSource: varchar('fx_source', { length: 50 }),       // 'RBI' | 'Wise' | 'XE' | 'manual'
@@ -130,6 +131,7 @@ export const destinations = mysqlTable('destinations', {
   checkout: varchar('checkout', { length: 10 }),
   nights: int('nights'),
   narrative: text('narrative'),
+  heroImage: text('hero_image'),   // URL of the destination's cover photo
   sortOrder: int('sort_order').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });

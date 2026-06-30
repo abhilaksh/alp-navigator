@@ -15,6 +15,7 @@ import { ChecklistPanel } from '@/components/editor/checklist-panel';
 import { ShareModal } from '@/components/editor/share-modal';
 import { ClientContextPanel } from '@/components/editor/client-context-panel';
 import { PaymentPanel } from '@/components/editor/payment-panel';
+import { PhotoPicker } from '@/components/editor/photo-picker';
 import { VersionHistoryPanel } from '@/components/editor/version-history-panel';
 import { ChangeRequestsPanel } from '@/components/editor/change-requests-panel';
 import { IntakePanel } from '@/components/editor/intake-panel';
@@ -347,7 +348,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         const dest = await res.json();
         const newDest: DestinationState = {
           id: dest.id, name, country: null, checkin: null, checkout: null, nights: null,
-          sortOrder: destinations.length, narrative: null, items: [], visaInfo: null,
+          sortOrder: destinations.length, narrative: null, heroImage: null, items: [], visaInfo: null,
         };
         setDests(prev => [...prev, newDest]);
         setActiveDest(dest.id);
@@ -413,6 +414,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         }
       } catch { /* no-op */ }
     }
+  }
+
+  async function handleHeroImageChange(destId: number, url: string | null) {
+    setDests(prev => updateDest(prev, destId, d => ({ ...d, heroImage: url })));
+    await fetch(`/api/destinations/${destId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ heroImage: url }),
+    }).catch(() => {});
   }
 
   // ─── Hotel mutations ─────────────────────────────────────────────────────────
@@ -1282,6 +1292,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   d.id === activeDest.id ? { ...d, narrative } : d
                 ))}
               />
+
+              {/* Destination photo */}
+              <div className="mb-[18px]">
+                <PhotoPicker
+                  currentUrl={activeDest.heroImage ?? null}
+                  onSelect={url => handleHeroImageChange(activeDest.id, url)}
+                  placeholder={`${activeDest.name ?? 'destination'} travel photo`}
+                />
+              </div>
 
               {/* Trip notes */}
               {(notes || true) && (

@@ -27,6 +27,7 @@ export type DestinationState = {
   checkin: string | null; checkout: string | null;
   nights: number | null; sortOrder: number;
   narrative: string | null;
+  heroImage: string | null;
   items: (HotelItemState | LineItemState)[];
   visaInfo: VisaInfoState | null;
 };

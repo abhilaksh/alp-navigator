@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { label, adults, status, clientId, notes, totalFromInr, fxDate, fxSource, fxBufferPct, fxUsdToInr, paymentData, intakeStatus, personalNote, journeyOverview, budgetStatedInr, budgetEstimatedInr, urgencyFlag, clarificationFlags } = body;
+  const { label, adults, status, clientId, notes, totalFromInr, fxDate, fxSource, fxBufferPct, fxUsdToInr, paymentData, intakeStatus, personalNote, journeyOverview, heroImage, budgetStatedInr, budgetEstimatedInr, urgencyFlag, clarificationFlags } = body;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (label !== undefined) updates.label = label;
@@ -59,6 +59,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
   if (personalNote !== undefined) updates.personalNote = personalNote;
   if (journeyOverview !== undefined) updates.journeyOverview = journeyOverview;
+  if (heroImage !== undefined) updates.heroImage = heroImage;
   if (budgetStatedInr !== undefined) updates.budgetStatedInr = budgetStatedInr;
   if (budgetEstimatedInr !== undefined) updates.budgetEstimatedInr = budgetEstimatedInr;
   if (urgencyFlag !== undefined) updates.urgencyFlag = urgencyFlag;
