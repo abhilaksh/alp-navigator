@@ -4,10 +4,11 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Plus, MapPin } from 'lucide-react';
 import { Topbar, type SaveStatus, type WorkflowStatus } from '@/components/editor/topbar';
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
+import { LineItemCard, type LineItemState } from '@/components/editor/line-item-card';
 import { SearchPanel, type SearchResult } from '@/components/editor/search-panel';
 import type { ParsedRate } from '@/lib/db/schema';
 import type { TripFull, DestinationState, RateRow } from './types';
-import { mapDestinations, updateDest, updateItem, updateRate } from './editor-utils';
+import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, isHotelItem } from './editor-utils';
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
 
@@ -23,11 +24,12 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated                    = useRef(false);
 
   const activeDest  = destinations.find(d => d.id === activeDestId) ?? null;
-  const hotelItems  = activeDest?.items ?? [];
+  const hotelItems  = (activeDest?.items ?? []).filter(isHotelItem);
   const clientName  = initialTrip.client?.name ?? null;
   const clientEmail = (initialTrip.client as { email?: string | null } | null)?.email ?? null;
   const clientWa    = (initialTrip.client as { whatsapp?: string | null } | null)?.whatsapp ?? null;
@@ -81,6 +83,10 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       d.items.forEach((item, i) => {
         const badge = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] ?? String(i + 1);
         lines.push(`\n${badge}. ${item.title}`);
+        if (!isHotelItem(item)) {
+          if (item.confirmedTotalInr) lines.push(`   Total: ₹${item.confirmedTotalInr.toLocaleString('en-IN')}`);
+          return;
+        }
         const detail = item.hotelDetails;
         if (detail) {
           const done = detail.rates.find(r => r.status === 'done');
@@ -373,11 +379,52 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }).catch(() => {});
   }
 
+  // ─── Line item mutations ─────────────────────────────────────────────────────
+  async function handleAddLineItem(type: LineItemState['type']) {
+    if (!activeDestId) return;
+    const res = await fetch('/api/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tripId: id, destinationId: activeDestId, type, title: type.charAt(0).toUpperCase() + type.slice(1) }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const newItem: LineItemState = {
+        id: data.id, type, title: data.title,
+        bookingStatus: 'researching', bookingRef: null,
+        confirmedTotalInr: null, startDate: null, endDate: null,
+        detailsJson: null, sortOrder: (activeDest?.items.length ?? 0),
+      };
+      setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
+      setNewItemIds(prev => new Set(prev).add(data.id));
+    }
+  }
+
+  async function handleUpdateLineItem(itemId: number, patch: Partial<LineItemState>) {
+    await fetch(`/api/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).catch(() => {});
+    setDests(prev => updateLineItem(prev, itemId, i => ({ ...i, ...patch })));
+    setNewItemIds(prev => { const n = new Set(prev); n.delete(itemId); return n; });
+  }
+
+  async function handleDeleteLineItem(itemId: number) {
+    await fetch(`/api/items/${itemId}`, { method: 'DELETE' }).catch(() => {});
+    setDests(prev => prev.map(d => ({ ...d, items: d.items.filter(i => i.id !== itemId) })));
+    setNewItemIds(prev => { const n = new Set(prev); n.delete(itemId); return n; });
+  }
+
   // ─── Computed ───────────────────────────────────────────────────────────────
   const totalFromInr = useMemo(() => {
     let total = 0;
     for (const dest of destinations) {
       for (const item of dest.items) {
+        if (!isHotelItem(item)) {
+          if (item.confirmedTotalInr) total += item.confirmedTotalInr;
+          continue;
+        }
         const rates = item.hotelDetails?.rates?.filter(r => r.status === 'done' && r.parsedData) ?? [];
         if (rates.length === 0) continue;
         const totals = rates.map(r => {
@@ -566,15 +613,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                 />
               )}
 
-              {/* Hotels count row */}
+              {/* Hotels + line items count row */}
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-semibold tracking-[0.1em] uppercase text-ink-mute">
                   Selected hotels {hotelItems.length}
                 </span>
               </div>
 
-              {/* Hotel cards */}
-              {hotelItems.length === 0 ? (
+              {/* Hotel + line item cards */}
+              {(activeDest?.items ?? []).length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <MapPin size={36} className="text-glacier mb-4" />
                   <p className="font-display text-lg text-ink-soft mb-2">No hotels yet</p>
@@ -583,26 +630,40 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   </p>
                 </div>
               ) : (
-                hotelItems.map((item, i) => (
-                  <HotelCard
-                    key={item.id}
-                    item={item}
-                    index={i}
-                    onRemove={handleRemoveHotel}
-                    onMoveUp={i > 0 ? () => handleMoveHotel(activeDest.id, i, i - 1) : undefined}
-                    onMoveDown={i < hotelItems.length - 1 ? () => handleMoveHotel(activeDest.id, i, i + 1) : undefined}
-                    onAddRate={handleAddRate}
-                    onRemoveRate={handleRemoveRate}
-                    onParseRate={handleParseRate}
-                    onSourceChange={handleSourceChange}
-                    onSelectProposal={handleSelectProposal}
-                    onTitleChange={handleHotelTitleChange}
-                    onRecommendationChange={handleRecommendationChange}
-                    onRecommendationBlur={handleRecommendationBlur}
-                    onLocationScoreChange={handleLocationScoreChange}
-                    onLocationScoreBlur={handleLocationScoreBlur}
-                  />
-                ))
+                (activeDest?.items ?? []).map((item, i) => {
+                  if (isHotelItem(item)) {
+                    const hotelIdx = hotelItems.indexOf(item);
+                    return (
+                      <HotelCard
+                        key={item.id}
+                        item={item}
+                        index={hotelIdx}
+                        onRemove={handleRemoveHotel}
+                        onMoveUp={hotelIdx > 0 ? () => handleMoveHotel(activeDest!.id, hotelIdx, hotelIdx - 1) : undefined}
+                        onMoveDown={hotelIdx < hotelItems.length - 1 ? () => handleMoveHotel(activeDest!.id, hotelIdx, hotelIdx + 1) : undefined}
+                        onAddRate={handleAddRate}
+                        onRemoveRate={handleRemoveRate}
+                        onParseRate={handleParseRate}
+                        onSourceChange={handleSourceChange}
+                        onSelectProposal={handleSelectProposal}
+                        onTitleChange={handleHotelTitleChange}
+                        onRecommendationChange={handleRecommendationChange}
+                        onRecommendationBlur={handleRecommendationBlur}
+                        onLocationScoreChange={handleLocationScoreChange}
+                        onLocationScoreBlur={handleLocationScoreBlur}
+                      />
+                    );
+                  }
+                  return (
+                    <LineItemCard
+                      key={item.id}
+                      item={item as LineItemState}
+                      defaultOpen={newItemIds.has(item.id)}
+                      onUpdate={handleUpdateLineItem}
+                      onDelete={handleDeleteLineItem}
+                    />
+                  );
+                })
               )}
 
               {/* Add hotel button */}
@@ -614,6 +675,21 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                 <Plus size={14} />
                 Add hotel to {activeDest.name}
               </button>
+
+              {/* Add line item buttons */}
+              <div className="flex gap-2 mt-2">
+                {(['flight', 'transfer', 'activity'] as const).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => handleAddLineItem(type)}
+                    className="flex items-center gap-[6px] flex-1 px-2.5 py-[9px] text-[11px] text-ink-mute border border-dashed border-glacier rounded-[4px] cursor-pointer hover:text-spruce hover:border-spruce transition-colors font-sans justify-center"
+                    style={{ background: 'none' }}
+                  >
+                    <span>{type === 'flight' ? '✈' : type === 'transfer' ? '🚗' : '🎭'}</span>
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </button>
+                ))}
+              </div>
             </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center py-24">

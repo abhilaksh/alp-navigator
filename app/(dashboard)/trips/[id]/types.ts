@@ -1,5 +1,6 @@
 import type { getTripById } from '@/lib/db/queries';
 import type { HotelItemState } from '@/components/editor/hotel-card';
+import type { LineItemState } from '@/components/editor/line-item-card';
 
 export type TripFull = NonNullable<Awaited<ReturnType<typeof getTripById>>>;
 
@@ -14,5 +15,7 @@ export type DestinationState = {
   id: number; name: string; country: string | null;
   checkin: string | null; checkout: string | null;
   nights: number | null; sortOrder: number;
-  items: HotelItemState[];
+  items: (HotelItemState | LineItemState)[];
 };
+
+export type { LineItemState };
