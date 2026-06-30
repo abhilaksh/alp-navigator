@@ -13,6 +13,9 @@ export interface SearchResult {
   thumbnail: string | null;
   foraId: string | null;
   isForaPreferred?: boolean;
+  isForaReserve?: boolean;
+  foraPrograms?: string[];
+  commissionRange?: string | null;
   isVirtuoso?: boolean;
   lat?: number;
   lng?: number;
@@ -390,9 +393,19 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
           )}
         </div>
         <div className="flex gap-[3px] flex-wrap mt-1">
-          {hotel.isForaPreferred && (
+          {hotel.isForaReserve && (
+            <span className="text-[9px] font-sans font-semibold px-[5px] py-px rounded-sm" style={{ background: 'rgba(169,139,82,0.14)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.3)' }}>
+              Fora Reserve
+            </span>
+          )}
+          {!hotel.isForaReserve && hotel.isForaPreferred && (
             <span className="text-[9px] font-sans px-[5px] py-px rounded-sm" style={{ background: 'rgba(30,58,47,0.08)', color: '#1E3A2F' }}>
               Fora Preferred
+            </span>
+          )}
+          {hotel.commissionRange && (
+            <span className="text-[9px] font-mono px-[5px] py-px rounded-sm" style={{ background: 'rgba(22,26,23,0.05)', color: '#8A9189' }}>
+              {hotel.commissionRange}
             </span>
           )}
           {hotel.isVirtuoso && (

@@ -7,6 +7,13 @@ import type { ParsedRate } from '@/lib/db/schema';
 
 const BADGE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
+export interface ForaPartnerInfo {
+  programs: string[];
+  awards?: Array<{ slug: string; label: string; value: number }>;
+  commissionRange?: string;
+  perks?: string;
+}
+
 export interface HotelDetailState {
   id: number;
   itemId: number;
@@ -21,6 +28,7 @@ export interface HotelDetailState {
   lng: number | null;
   googleRateInr: number | null;
   holdExpiresAt: string | null;
+  foraPartner?: ForaPartnerInfo | null;
   rates: RateState[];
 }
 
@@ -196,6 +204,20 @@ export function HotelCard({
             </span>
           )}
 
+          {/* Fora program + award badges */}
+          {detail?.foraPartner?.programs.includes('Fora Reserve') && (
+            <span className="font-sans text-[9px] font-semibold tracking-[0.06em] uppercase flex-shrink-0 px-[5px] py-[2px] rounded-[2px]"
+              style={{ background: 'rgba(169,139,82,0.15)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.3)' }}>
+              FR
+            </span>
+          )}
+          {detail?.foraPartner?.awards?.map((aw, ai) => (
+            <span key={ai} className="font-sans text-[9px] font-medium flex-shrink-0 px-[5px] py-[2px] rounded-[2px]"
+              style={{ background: 'rgba(30,58,47,0.08)', color: '#4A514B', border: '1px solid rgba(30,58,47,0.15)' }}>
+              {aw.slug === 'michelin_keys' ? `${aw.value}🔑` : aw.slug === 'michelin_stars' ? `${aw.value}★M` : aw.slug === 'forbes' ? 'Forbes' : aw.label}
+            </span>
+          ))}
+
           {/* Collapse toggle */}
           <button
             onClick={() => setCollapsed(v => !v)}
@@ -229,6 +251,33 @@ export function HotelCard({
             {collapsedSummary && (
               <div className="px-[11px] pb-[7px] pl-[40px] text-[11px] text-ink-soft tracking-[0.01em]">
                 {collapsedSummary}
+              </div>
+            )}
+
+            {/* Fora programs + perks */}
+            {detail?.foraPartner && (
+              <div className="px-[11px] pb-[8px] pl-[40px]">
+                <div className="flex flex-wrap gap-[5px] mb-[5px]">
+                  {detail.foraPartner.programs.map((prog, pi) => (
+                    <span key={pi}
+                      className="font-sans text-[9px] font-semibold uppercase tracking-[0.06em] px-[6px] py-[2px] rounded-[2px]"
+                      style={prog === 'Fora Reserve'
+                        ? { background: 'rgba(169,139,82,0.12)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.28)' }
+                        : { background: 'rgba(30,58,47,0.07)', color: '#4A514B', border: '1px solid rgba(30,58,47,0.14)' }
+                      }>{prog}</span>
+                  ))}
+                  {detail.foraPartner.commissionRange && (
+                    <span className="font-mono text-[9px] px-[5px] py-[2px] rounded-[2px]"
+                      style={{ background: 'rgba(22,26,23,0.05)', color: '#8A9189' }}>
+                      {detail.foraPartner.commissionRange}
+                    </span>
+                  )}
+                </div>
+                {detail.foraPartner.perks && (
+                  <p className="font-sans text-[10px] text-ink-soft leading-[1.55]" style={{ borderLeft: '2px solid rgba(169,139,82,0.35)', paddingLeft: 6 }}>
+                    {detail.foraPartner.perks}
+                  </p>
+                )}
               </div>
             )}
 

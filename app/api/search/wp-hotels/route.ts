@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries';
+import { getForaPartner } from '@/lib/fora/lookup';
 
 const WP_API = 'https://alptravel.co/wp-json/wp/v2';
 
@@ -34,24 +35,33 @@ export async function POST(req: NextRequest) {
 
   const posts: WpHotel[] = await wpRes.json();
 
-  const results = posts.map(p => ({
-    id: `wp-${p.id}`,
-    name: p.title?.rendered ?? '',
-    stars: parseInt(p.acf?.hotel_class ?? '0', 10) || 0,
-    rating: parseFloat(p.acf?.rating ?? '0') || 0,
-    reviews: 0,
-    googleRateInr: null,
-    thumbnail: p.acf?.thumbnail ?? null,
-    foraId: p.acf?.fora_id ?? null,
-    isForaPreferred: Boolean(p.acf?.is_fora_preferred),
-    isVirtuoso: Boolean(p.acf?.is_virtuoso),
-    lat: parseFloat(p.acf?.lat ?? '') || undefined,
-    lng: parseFloat(p.acf?.lng ?? '') || undefined,
-    hotelWebsite: p.acf?.hotel_website ?? null,
-    wpId: p.id,
-    wpSlug: p.slug,
-    source: 'wp' as const,
-  }));
+  const results = posts.map(p => {
+    const foraId = p.acf?.fora_id ?? null;
+    const fp = foraId ? getForaPartner(foraId) : null;
+    return {
+      id: `wp-${p.id}`,
+      name: p.title?.rendered ?? '',
+      stars: parseInt(p.acf?.hotel_class ?? '0', 10) || 0,
+      rating: parseFloat(p.acf?.rating ?? '0') || 0,
+      reviews: 0,
+      googleRateInr: null,
+      thumbnail: p.acf?.thumbnail ?? null,
+      foraId,
+      isForaPreferred: Boolean(p.acf?.is_fora_preferred) || Boolean(fp),
+      isForaReserve: fp?.programs.includes('Fora Reserve') ?? false,
+      foraPrograms: fp?.programs ?? [],
+      foraPerks: fp?.perks ?? null,
+      commissionRange: fp?.commissionRange ?? null,
+      awards: fp?.awards ?? [],
+      isVirtuoso: Boolean(p.acf?.is_virtuoso),
+      lat: parseFloat(p.acf?.lat ?? '') || undefined,
+      lng: parseFloat(p.acf?.lng ?? '') || undefined,
+      hotelWebsite: p.acf?.hotel_website ?? null,
+      wpId: p.id,
+      wpSlug: p.slug,
+      source: 'wp' as const,
+    };
+  });
 
   return NextResponse.json({ results, total: results.length });
 }

@@ -231,6 +231,14 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     });
     if (res.ok) {
       const data = await res.json();
+      // Look up Fora partner data for this hotel
+      let foraPartner = null;
+      if (hotel.foraId) {
+        try {
+          const fp = await fetch(`/api/fora-lookup?id=${encodeURIComponent(hotel.foraId)}`);
+          if (fp.ok) foraPartner = await fp.json();
+        } catch { /* no-op */ }
+      }
       const newItem: HotelItemState = {
         id: data.item.id, type: 'hotel', title: hotel.name,
         bookingStatus: 'researching', sortOrder: hotelItems.length,
@@ -241,7 +249,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           recommendation: null, foraId: hotel.foraId, hotelWebsite: null,
           thumbnail: hotel.thumbnail, lat: hotel.lat ?? null,
           lng: hotel.lng ?? null, googleRateInr: hotel.googleRateInr,
-          holdExpiresAt: null, rates: [],
+          holdExpiresAt: null, foraPartner, rates: [],
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
