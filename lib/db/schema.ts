@@ -114,6 +114,7 @@ export const destinations = mysqlTable('destinations', {
   checkin: varchar('checkin', { length: 10 }),
   checkout: varchar('checkout', { length: 10 }),
   nights: int('nights'),
+  narrative: text('narrative'),
   sortOrder: int('sort_order').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });

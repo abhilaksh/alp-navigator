@@ -10,6 +10,7 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
   return raw.map(d => ({
     id: d.id, name: d.name, country: d.country,
     checkin: d.checkin, checkout: d.checkout, nights: d.nights, sortOrder: d.sortOrder,
+    narrative: (d as { narrative?: string | null }).narrative ?? null,
     visaInfo: (d as { visaInfo?: VisaInfoState | null }).visaInfo ?? null,
     items: d.items.map(i => {
       if (i.type === 'hotel') {

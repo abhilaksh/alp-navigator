@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { name, country, checkin, checkout, nights, sortOrder } = body;
+  const { name, country, checkin, checkout, nights, sortOrder, narrative } = body;
 
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
@@ -31,6 +31,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (checkout !== undefined) updates.checkout = checkout;
   if (nights !== undefined) updates.nights = nights;
   if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+  if (narrative !== undefined) updates.narrative = narrative;
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 });

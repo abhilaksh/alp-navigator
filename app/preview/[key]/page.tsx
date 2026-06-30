@@ -186,6 +186,20 @@ export default async function PreviewPage({ params }: Props) {
                       {dest.nights ? ` · ${dest.nights} nights` : ''}
                     </p>
                   )}
+                  {(dest as { narrative?: string | null }).narrative && (
+                    <p
+                      className="mt-3 text-[13px] italic leading-relaxed"
+                      style={{
+                        color: '#4A514B',
+                        fontFamily: 'Fraunces, Georgia, serif',
+                        fontWeight: 300,
+                        borderLeft: '2px solid rgba(169,139,82,0.4)',
+                        paddingLeft: 12,
+                      }}
+                    >
+                      {(dest as { narrative?: string | null }).narrative}
+                    </p>
+                  )}
                 </div>
               </div>
 

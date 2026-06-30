@@ -12,6 +12,135 @@ import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, is
 import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
 import { BookingsPanel } from '@/components/editor/bookings-panel';
 
+// ─── NarrativeBlock ───────────────────────────────────────────────────────────
+
+interface NarrativeBlockProps {
+  destId: number;
+  narrative: string | null;
+  destName: string;
+  nights: number | null;
+  hotelNames: string[];
+  clientName: string | null;
+  onSave: (narrative: string) => void;
+}
+
+function NarrativeBlock({ destId, narrative, destName, nights, hotelNames, clientName, onSave }: NarrativeBlockProps) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue]     = useState(narrative ?? '');
+  const [generating, setGen]  = useState(false);
+
+  // keep in sync if parent updates
+  useState(() => { setValue(narrative ?? ''); });
+
+  async function generate() {
+    setGen(true);
+    try {
+      const res = await fetch(`/api/destinations/${destId}/narrative`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hotelNames: hotelNames.length ? hotelNames : undefined,
+          nights: nights ?? undefined,
+          clientContext: clientName ?? undefined,
+        }),
+      });
+      if (res.ok) {
+        const { narrative: gen } = await res.json() as { narrative: string };
+        setValue(gen);
+        onSave(gen);
+      }
+    } finally {
+      setGen(false);
+    }
+  }
+
+  async function save(text: string) {
+    await fetch(`/api/destinations/${destId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ narrative: text }),
+    }).catch(() => {});
+    onSave(text);
+  }
+
+  if (editing) {
+    return (
+      <div className="mb-[18px] relative">
+        <textarea
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          rows={3}
+          autoFocus
+          className="w-full font-sans text-[13px] text-ink-soft bg-transparent outline-none resize-none py-1 leading-relaxed"
+          style={{ borderBottom: '1px solid #A98B52' }}
+          onBlur={async () => {
+            setEditing(false);
+            await save(value);
+          }}
+        />
+        <div className="flex items-center gap-2 mt-1">
+          <button
+            onMouseDown={e => { e.preventDefault(); }}
+            onClick={generate}
+            disabled={generating}
+            className="font-mono text-[9px] uppercase tracking-[0.08em] px-2 py-1 rounded-[2px] cursor-pointer transition-opacity disabled:opacity-50"
+            style={{ background: 'rgba(169,139,82,0.1)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.25)' }}
+          >
+            {generating ? 'Writing…' : '✦ Regenerate'}
+          </button>
+          <button
+            onMouseDown={e => { e.preventDefault(); }}
+            onClick={async () => { setEditing(false); await save(''); setValue(''); }}
+            className="font-mono text-[9px] uppercase tracking-[0.08em] px-2 py-1 rounded-[2px] cursor-pointer transition-opacity"
+            style={{ background: 'transparent', color: '#8A9189' }}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (value) {
+    return (
+      <div
+        className="mb-[18px] group cursor-text relative"
+        onClick={() => setEditing(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && setEditing(true)}
+      >
+        <p
+          className="font-serif text-[13px] text-ink-soft leading-[1.65] italic transition-opacity group-hover:opacity-80"
+          style={{ fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300, borderLeft: '2px solid rgba(169,139,82,0.35)', paddingLeft: 10 }}
+        >
+          {value}
+        </p>
+        <span className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 font-mono text-[8px] text-ink-mute transition-opacity">
+          edit
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-[16px]">
+      <button
+        onClick={generate}
+        disabled={generating}
+        className="inline-flex items-center gap-[6px] font-mono text-[9px] uppercase tracking-[0.08em] px-[10px] py-[5px] rounded-[3px] cursor-pointer transition-opacity disabled:opacity-50 hover:opacity-80"
+        style={{ background: 'rgba(169,139,82,0.08)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.2)' }}
+      >
+        {generating ? (
+          <><span className="inline-block w-[10px] h-[10px] rounded-full" style={{ background: '#A98B52', animation: 'pulse 1s infinite' }} /> Writing narrative…</>
+        ) : (
+          <>✦ Generate destination narrative</>
+        )}
+      </button>
+    </div>
+  );
+}
+
 // ─── Editor ───────────────────────────────────────────────────────────────────
 
 interface EditorProps { trip: TripFull; }
@@ -159,7 +288,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         const dest = await res.json();
         const newDest: DestinationState = {
           id: dest.id, name, country: null, checkin: null, checkout: null, nights: null,
-          sortOrder: destinations.length, items: [], visaInfo: null,
+          sortOrder: destinations.length, narrative: null, items: [], visaInfo: null,
         };
         setDests(prev => [...prev, newDest]);
         setActiveDest(dest.id);
@@ -791,6 +920,19 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   )}
                 </div>
               </div>
+
+              {/* Destination narrative */}
+              <NarrativeBlock
+                destId={activeDest.id}
+                narrative={activeDest.narrative ?? null}
+                destName={activeDest.name}
+                nights={activeDest.nights}
+                hotelNames={activeDest.items.filter(isHotelItem).map(h => h.title)}
+                clientName={clientName}
+                onSave={narrative => setDests(prev => prev.map(d =>
+                  d.id === activeDest.id ? { ...d, narrative } : d
+                ))}
+              />
 
               {/* Trip notes */}
               {(notes || true) && (
