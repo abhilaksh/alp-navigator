@@ -12,6 +12,7 @@ import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, is
 import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
 import { BookingsPanel } from '@/components/editor/bookings-panel';
 import { ChecklistPanel } from '@/components/editor/checklist-panel';
+import { ShareModal } from '@/components/editor/share-modal';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -157,6 +158,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
   const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist'>('editor');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [showShare, setShowShare]   = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated                    = useRef(false);
@@ -233,36 +235,9 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }).catch(() => {});
   }
 
-  // ─── WhatsApp copy ──────────────────────────────────────────────────────────
+  // ─── WhatsApp / Share modal ─────────────────────────────────────────────────
   function handleWhatsApp() {
-    const lines: string[] = [`*${label}*`, ''];
-    destinations.forEach(d => {
-      lines.push(`📍 *${d.name}*`);
-      if (d.checkin && d.checkout) lines.push(`${d.checkin} → ${d.checkout}`);
-      d.items.forEach((item, i) => {
-        const badge = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] ?? String(i + 1);
-        lines.push(`\n${badge}. ${item.title}`);
-        if (!isHotelItem(item)) {
-          if (item.confirmedTotalInr) lines.push(`   Total: ₹${item.confirmedTotalInr.toLocaleString('en-IN')}`);
-          return;
-        }
-        const detail = item.hotelDetails;
-        if (detail) {
-          const done = detail.rates.find(r => r.status === 'done');
-          if (done?.parsedData) {
-            try {
-              const p: ParsedRate = JSON.parse(done.parsedData);
-              if (p.room_type) lines.push(`   Room: ${p.room_type}`);
-              if (p.total_inr) lines.push(`   Total: ₹${p.total_inr.toLocaleString('en-IN')}`);
-              if (p.cancellation_free) lines.push(`   ✅ Free cancellation${p.cancellation_deadline ? ` until ${p.cancellation_deadline}` : ''}`);
-              if (p.perks?.length) lines.push(`   ⭐ ${p.perks.join(' · ')}`);
-            } catch { /* skip */ }
-          }
-        }
-      });
-      lines.push('');
-    });
-    navigator.clipboard.writeText(lines.join('\n')).catch(() => {});
+    setShowShare(true);
   }
 
   // ─── Preview ────────────────────────────────────────────────────────────────
@@ -717,6 +692,17 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   return (
     <div className="flex flex-col overflow-hidden" style={{ height: '100dvh', maxHeight: '100dvh' }}>
 
+      <ShareModal
+        isOpen={showShare}
+        onClose={() => setShowShare(false)}
+        tripLabel={label}
+        clientName={clientName}
+        clientWa={clientWa}
+        clientEmail={clientEmail}
+        previewKey={initialTrip.previewKey ?? null}
+        destinations={destinations}
+        totalFromInr={totalFromInr}
+      />
       {/* Topbar */}
       <Topbar
         label={label}
