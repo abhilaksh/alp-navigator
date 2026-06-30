@@ -371,6 +371,28 @@ export const itineraryBlocksRelations = relations(itineraryBlocks, ({ one }) => 
   item: one(tripItems, { fields: [itineraryBlocks.itemId], references: [tripItems.id] }),
 }));
 
+// ─── Advisor Profile ──────────────────────────────────────────────────────────
+
+export const advisorProfiles = mysqlTable('advisor_profiles', {
+  id: int('id').autoincrement().primaryKey(),
+  teamId: int('team_id').notNull().references(() => teams.id).unique(),
+  displayName: varchar('display_name', { length: 100 }),
+  agencyName: varchar('agency_name', { length: 150 }),
+  tagline: varchar('tagline', { length: 255 }),
+  email: varchar('email', { length: 255 }),
+  whatsappNumber: varchar('whatsapp_number', { length: 30 }),
+  foraAdvisorId: varchar('fora_advisor_id', { length: 100 }),
+  virtuosoMembership: varchar('virtuoso_membership', { length: 100 }),
+  iataNumber: varchar('iata_number', { length: 30 }),
+  quoteFooter: text('quote_footer'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const advisorProfilesRelations = relations(advisorProfiles, ({ one }) => ({
+  team: one(teams, { fields: [advisorProfiles.teamId], references: [teams.id] }),
+}));
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
@@ -397,6 +419,7 @@ export type NewRate = typeof rates.$inferInsert;
 export type ItineraryDay = typeof itineraryDays.$inferSelect;
 export type ItineraryBlock = typeof itineraryBlocks.$inferSelect;
 export type TripSnapshot = typeof tripSnapshots.$inferSelect;
+export type AdvisorProfile = typeof advisorProfiles.$inferSelect;
 export type NewTripSnapshot = typeof tripSnapshots.$inferInsert;
 export type ChangeRequest = typeof changeRequests.$inferSelect;
 export type NewChangeRequest = typeof changeRequests.$inferInsert;
