@@ -1,287 +1,275 @@
-'use client';
+import Link from 'next/link';
+import { getTripsWithDetailsForUser, getHoldExpiryByTrip, getCommissionSummaryForUser, getUser } from '@/lib/db/queries';
 
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardFooter
-} from '@/components/ui/card';
-import { customerPortalAction } from '@/lib/payments/actions';
-import { useActionState } from 'react';
-import { TeamDataWithMembers, User } from '@/lib/db/schema';
-import { removeTeamMember, inviteTeamMember } from '@/app/(login)/actions';
-import useSWR from 'swr';
-import { Suspense } from 'react';
-import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-import { Loader2, PlusCircle } from 'lucide-react';
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-type ActionState = {
-  error?: string;
-  success?: string;
+function daysBetween(a: Date, b: Date) {
+  return Math.floor((b.getTime() - a.getTime()) / 86400000);
+}
+
+function fmtDate(d: string) {
+  try {
+    return new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  } catch { return d; }
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: 'Draft', sent: 'Sent', accepted: 'Accepted', booked: 'Booked',
 };
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
+  draft:    { bg: 'rgba(22,26,23,0.06)',  text: '#4A514B' },
+  sent:     { bg: 'rgba(169,139,82,0.12)', text: '#7a5e2e' },
+  accepted: { bg: 'rgba(30,58,47,0.1)',   text: '#1E3A2F' },
+  booked:   { bg: 'rgba(46,107,69,0.12)', text: '#2E6B45' },
+};
 
-function SubscriptionSkeleton() {
-  return (
-    <Card className="mb-8 h-[140px]">
-      <CardHeader>
-        <CardTitle>Team Subscription</CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
+// ── Page ─────────────────────────────────────────────────────────────────────
 
-function ManageSubscription() {
-  const { data: teamData } = useSWR<TeamDataWithMembers>('/api/team', fetcher);
+export default async function DashboardPage() {
+  const user = await getUser();
+  const [allTrips, holdMap, commission] = await Promise.all([
+    getTripsWithDetailsForUser(false),
+    user ? getHoldExpiryByTrip(user.id) : Promise.resolve(new Map<number, string>()),
+    getCommissionSummaryForUser(),
+  ]);
 
-  return (
-    <Card className="mb-8">
-      <CardHeader>
-        <CardTitle>Team Subscription</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-            <div className="mb-4 sm:mb-0">
-              <p className="font-medium">
-                Current Plan: {teamData?.planName || 'Free'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {teamData?.subscriptionStatus === 'active'
-                  ? 'Billed monthly'
-                  : teamData?.subscriptionStatus === 'trialing'
-                  ? 'Trial period'
-                  : 'No active subscription'}
-              </p>
-            </div>
-            <form action={customerPortalAction}>
-              <Button type="submit" variant="outline">
-                Manage Subscription
-              </Button>
-            </form>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+  const now = new Date();
 
-function TeamMembersSkeleton() {
-  return (
-    <Card className="mb-8 h-[140px]">
-      <CardHeader>
-        <CardTitle>Team Members</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="animate-pulse space-y-4 mt-1">
-          <div className="flex items-center space-x-4">
-            <div className="size-8 rounded-full bg-gray-200"></div>
-            <div className="space-y-2">
-              <div className="h-4 w-32 bg-gray-200 rounded"></div>
-              <div className="h-3 w-14 bg-gray-200 rounded"></div>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+  // ── Compute urgents ───────────────────────────────────────────────────────
+  const holdExpiries = allTrips.flatMap(t => {
+    const holdStr = holdMap.get(t.id);
+    if (!holdStr) return [];
+    const holdDate = new Date(holdStr);
+    const daysLeft = daysBetween(now, holdDate);
+    if (daysLeft > 7) return [];
+    return [{ trip: t, holdDate, daysLeft }];
+  }).sort((a, b) => a.daysLeft - b.daysLeft);
 
-function TeamMembers() {
-  const { data: teamData } = useSWR<TeamDataWithMembers>('/api/team', fetcher);
-  const [removeState, removeAction, isRemovePending] = useActionState<
-    ActionState,
-    FormData
-  >(removeTeamMember, {});
+  const noEngagement = allTrips.filter(t => {
+    if (t.status !== 'sent') return false;
+    if (t.firstViewedAt) return false; // client has viewed it
+    const daysSinceUpdate = daysBetween(new Date(t.updatedAt), now);
+    return daysSinceUpdate >= 5;
+  }).sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
 
-  const getUserDisplayName = (user: Pick<User, 'id' | 'name' | 'email'>) => {
-    return user.name || user.email || 'Unknown User';
-  };
+  // ── Pipeline counts ───────────────────────────────────────────────────────
+  const statusCounts = allTrips.reduce<Record<string, number>>((acc, t) => {
+    acc[t.status] = (acc[t.status] ?? 0) + 1;
+    return acc;
+  }, {});
 
-  if (!teamData?.teamMembers?.length) {
-    return (
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Team Members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">No team members yet.</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // ── Recent trips ──────────────────────────────────────────────────────────
+  const recentTrips = [...allTrips].sort((a, b) =>
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  ).slice(0, 6);
 
   return (
-    <Card className="mb-8">
-      <CardHeader>
-        <CardTitle>Team Members</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="space-y-4">
-          {teamData.teamMembers.map((member, index) => (
-            <li key={member.id} className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Avatar>
-                  {/* 
-                    This app doesn't save profile images, but here
-                    is how you'd show them:
+    <div className="max-w-4xl mx-auto px-5 lg:px-8 py-8 space-y-10">
 
-                    <AvatarImage
-                      src={member.user.image || ''}
-                      alt={getUserDisplayName(member.user)}
-                    />
-                  */}
-                  <AvatarFallback>
-                    {getUserDisplayName(member.user)
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')}
-                  </AvatarFallback>
-                </Avatar>
+      {/* ── Title ──────────────────────────────────────────────────────── */}
+      <div>
+        <p
+          className="text-[10px] uppercase tracking-[0.14em] mb-1"
+          style={{ color: '#A98B52', fontFamily: 'Schibsted Grotesk, sans-serif' }}
+        >
+          Navigator
+        </p>
+        <h1
+          className="text-[28px] tracking-tight"
+          style={{ color: '#161A17', fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}
+        >
+          {now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </h1>
+      </div>
+
+      {/* ── Alerts ─────────────────────────────────────────────────────── */}
+      {(holdExpiries.length > 0 || noEngagement.length > 0) && (
+        <section>
+          <p
+            className="font-mono text-[9px] uppercase tracking-[0.12em] mb-4"
+            style={{ color: '#8A9189' }}
+          >
+            Needs attention
+          </p>
+          <div className="space-y-2">
+            {holdExpiries.map(({ trip, holdDate, daysLeft }) => {
+              const urgent = daysLeft <= 1;
+              return (
+                <Link
+                  key={`hold-${trip.id}`}
+                  href={`/trips/${trip.id}`}
+                  className="flex items-center justify-between px-4 py-3 rounded-[4px] hover:opacity-90 transition-opacity"
+                  style={{
+                    background: urgent ? 'rgba(220,38,38,0.07)' : 'rgba(169,139,82,0.08)',
+                    border: `1px solid ${urgent ? 'rgba(220,38,38,0.2)' : 'rgba(169,139,82,0.2)'}`,
+                  }}
+                >
+                  <div>
+                    <p className="text-[13px] font-medium" style={{ color: urgent ? '#dc2626' : '#7a5e2e' }}>
+                      {trip.label}
+                    </p>
+                    <p className="text-[11px] mt-0.5" style={{ color: '#8A9189' }}>
+                      {trip.clientName && `${trip.clientName} · `}
+                      Hold expires {holdDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </p>
+                  </div>
+                  <span
+                    className="font-mono text-[11px] px-2 py-0.5 rounded-[3px]"
+                    style={{
+                      background: urgent ? 'rgba(220,38,38,0.12)' : 'rgba(169,139,82,0.12)',
+                      color: urgent ? '#dc2626' : '#A98B52',
+                    }}
+                  >
+                    {daysLeft <= 0 ? 'Expired' : daysLeft === 1 ? 'Today' : `${daysLeft}d`}
+                  </span>
+                </Link>
+              );
+            })}
+
+            {noEngagement.map(t => (
+              <Link
+                key={`noeng-${t.id}`}
+                href={`/trips/${t.id}`}
+                className="flex items-center justify-between px-4 py-3 rounded-[4px] hover:opacity-90 transition-opacity"
+                style={{
+                  background: 'rgba(30,58,47,0.05)',
+                  border: '1px solid rgba(30,58,47,0.12)',
+                }}
+              >
                 <div>
-                  <p className="font-medium">
-                    {getUserDisplayName(member.user)}
+                  <p className="text-[13px] font-medium" style={{ color: '#1E3A2F' }}>
+                    {t.label}
                   </p>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {member.role}
+                  <p className="text-[11px] mt-0.5" style={{ color: '#8A9189' }}>
+                    {t.clientName && `${t.clientName} · `}
+                    Sent {daysBetween(new Date(t.updatedAt), now)}d ago — no views yet
                   </p>
                 </div>
-              </div>
-              {index > 1 ? (
-                <form action={removeAction}>
-                  <input type="hidden" name="memberId" value={member.id} />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    disabled={isRemovePending}
-                  >
-                    {isRemovePending ? 'Removing...' : 'Remove'}
-                  </Button>
-                </form>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        {removeState?.error && (
-          <p className="text-red-500 mt-4">{removeState.error}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function InviteTeamMemberSkeleton() {
-  return (
-    <Card className="h-[260px]">
-      <CardHeader>
-        <CardTitle>Invite Team Member</CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
-
-function InviteTeamMember() {
-  const { data: user } = useSWR<User>('/api/user', fetcher);
-  const isOwner = user?.role === 'owner';
-  const [inviteState, inviteAction, isInvitePending] = useActionState<
-    ActionState,
-    FormData
-  >(inviteTeamMember, {});
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Invite Team Member</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form action={inviteAction} className="space-y-4">
-          <div>
-            <Label htmlFor="email" className="mb-2">
-              Email
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="Enter email"
-              required
-              disabled={!isOwner}
-            />
+                <span
+                  className="font-mono text-[10px] uppercase tracking-[0.06em] px-2 py-0.5 rounded-[3px]"
+                  style={{ background: 'rgba(30,58,47,0.08)', color: '#1E3A2F' }}
+                >
+                  Follow up
+                </span>
+              </Link>
+            ))}
           </div>
-          <div>
-            <Label>Role</Label>
-            <RadioGroup
-              defaultValue="member"
-              name="role"
-              className="flex space-x-4"
-              disabled={!isOwner}
-            >
-              <div className="flex items-center space-x-2 mt-2">
-                <RadioGroupItem value="member" id="member" />
-                <Label htmlFor="member">Member</Label>
-              </div>
-              <div className="flex items-center space-x-2 mt-2">
-                <RadioGroupItem value="owner" id="owner" />
-                <Label htmlFor="owner">Owner</Label>
-              </div>
-            </RadioGroup>
-          </div>
-          {inviteState?.error && (
-            <p className="text-red-500">{inviteState.error}</p>
-          )}
-          {inviteState?.success && (
-            <p className="text-green-500">{inviteState.success}</p>
-          )}
-          <Button
-            type="submit"
-            className="bg-orange-500 hover:bg-orange-600 text-white"
-            disabled={isInvitePending || !isOwner}
-          >
-            {isInvitePending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Inviting...
-              </>
-            ) : (
-              <>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Invite Member
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-      {!isOwner && (
-        <CardFooter>
-          <p className="text-sm text-muted-foreground">
-            You must be a team owner to invite new members.
-          </p>
-        </CardFooter>
+        </section>
       )}
-    </Card>
-  );
-}
 
-export default function SettingsPage() {
-  return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium mb-6">Team Settings</h1>
-      <Suspense fallback={<SubscriptionSkeleton />}>
-        <ManageSubscription />
-      </Suspense>
-      <Suspense fallback={<TeamMembersSkeleton />}>
-        <TeamMembers />
-      </Suspense>
-      <Suspense fallback={<InviteTeamMemberSkeleton />}>
-        <InviteTeamMember />
-      </Suspense>
-    </section>
+      {/* ── Pipeline strip ─────────────────────────────────────────────── */}
+      <section>
+        <p className="font-mono text-[9px] uppercase tracking-[0.12em] mb-4" style={{ color: '#8A9189' }}>
+          Pipeline
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {(['draft', 'sent', 'accepted', 'booked'] as const).map(s => {
+            const count = statusCounts[s] ?? 0;
+            const style = STATUS_COLOR[s];
+            return (
+              <Link
+                key={s}
+                href={`/trips`}
+                className="flex items-center gap-3 px-4 py-3 rounded-[4px] hover:opacity-85 transition-opacity"
+                style={{ background: style.bg, border: `1px solid ${style.bg}` }}
+              >
+                <span
+                  className="font-mono text-[22px] leading-none"
+                  style={{ color: style.text }}
+                >
+                  {count}
+                </span>
+                <span className="text-[11px] font-sans" style={{ color: style.text, opacity: 0.75 }}>
+                  {STATUS_LABELS[s]}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Commission ─────────────────────────────────────────────────── */}
+      {commission.count > 0 && (
+        <section
+          className="rounded-[6px] p-5"
+          style={{ background: '#EDEAE1', border: '1px solid rgba(22,26,23,0.06)' }}
+        >
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] mb-4" style={{ color: '#8A9189' }}>
+            Commission
+          </p>
+          <div className="flex gap-10">
+            <div>
+              <p className="font-mono text-[11px] mb-1" style={{ color: '#8A9189' }}>Expected</p>
+              <p className="font-mono text-[20px]" style={{ color: '#161A17' }}>
+                ₹{commission.expected.toLocaleString('en-IN')}
+              </p>
+              <p className="text-[10px] mt-1" style={{ color: '#8A9189' }}>
+                across {commission.count} hotel{commission.count !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div>
+              <p className="font-mono text-[11px] mb-1" style={{ color: '#8A9189' }}>Received</p>
+              <p className="font-mono text-[20px]" style={{ color: commission.received > 0 ? '#2E6B45' : '#8A9189' }}>
+                ₹{commission.received.toLocaleString('en-IN')}
+              </p>
+              {commission.pending > 0 && (
+                <p className="text-[10px] mt-1" style={{ color: '#A98B52' }}>
+                  ₹{commission.pending.toLocaleString('en-IN')} pending
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Recent trips ───────────────────────────────────────────────── */}
+      {recentTrips.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: '#8A9189' }}>
+              Recent
+            </p>
+            <Link href="/trips" className="text-[11px] transition-colors" style={{ color: '#A98B52' }}>
+              All trips →
+            </Link>
+          </div>
+          <div className="space-y-1">
+            {recentTrips.map(t => {
+              const sc = STATUS_COLOR[t.status] ?? STATUS_COLOR.draft;
+              return (
+                <Link
+                  key={t.id}
+                  href={`/trips/${t.id}`}
+                  className="flex items-center justify-between px-4 py-3 rounded-[4px] hover:bg-paper-deep transition-colors"
+                  style={{ background: 'rgba(22,26,23,0.03)' }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[13px] text-ink truncate">{t.label}</p>
+                    {t.clientName && (
+                      <p className="text-[11px] mt-0.5" style={{ color: '#8A9189' }}>{t.clientName}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {t.totalFromInr != null && (
+                      <span className="font-mono text-[11px]" style={{ color: '#A98B52' }}>
+                        ₹{t.totalFromInr.toLocaleString('en-IN')}
+                      </span>
+                    )}
+                    <span
+                      className="text-[9px] uppercase tracking-[0.06em] px-2 py-0.5 rounded-[3px]"
+                      style={{ background: sc.bg, color: sc.text }}
+                    >
+                      {STATUS_LABELS[t.status] ?? t.status}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+    </div>
   );
 }

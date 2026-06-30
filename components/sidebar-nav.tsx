@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Map, Users, Settings, LogOut } from 'lucide-react';
+import { Map, Users, Settings, LogOut, LayoutDashboard } from 'lucide-react';
 import { signOut } from '@/app/(login)/actions';
 
 interface SidebarNavProps {
@@ -10,6 +10,7 @@ interface SidebarNavProps {
 }
 
 const navItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/trips', label: 'Trips', icon: Map },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/settings', label: 'Settings', icon: Settings },
