@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Plus, MapPin } from 'lucide-react';
 import { Topbar, type SaveStatus, type WorkflowStatus } from '@/components/editor/topbar';
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
@@ -24,6 +24,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hydrated                    = useRef(false);
 
   const activeDest  = destinations.find(d => d.id === activeDestId) ?? null;
   const hotelItems  = activeDest?.items ?? [];
@@ -373,6 +374,31 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   }
 
   // ─── Computed ───────────────────────────────────────────────────────────────
+  const totalFromInr = useMemo(() => {
+    let total = 0;
+    for (const dest of destinations) {
+      for (const item of dest.items) {
+        const rates = item.hotelDetails?.rates?.filter(r => r.status === 'done' && r.parsedData) ?? [];
+        if (rates.length === 0) continue;
+        const totals = rates.map(r => {
+          try { return (JSON.parse(r.parsedData!) as ParsedRate).total_inr ?? null; }
+          catch { return null; }
+        }).filter((n): n is number => n != null);
+        if (totals.length > 0) total += Math.min(...totals);
+      }
+    }
+    return total > 0 ? total : null;
+  }, [destinations]);
+
+  useEffect(() => {
+    if (!hydrated.current) { hydrated.current = true; return; }
+    fetch(`/api/trips/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ totalFromInr }),
+    }).catch(() => {});
+  }, [totalFromInr, id]);
+
   const addedHotelIds = new Set(
     hotelItems.flatMap(i => {
       const d = i.hotelDetails;
@@ -403,7 +429,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         saveStatus={saveStatus}
         onWhatsApp={handleWhatsApp}
         onPreview={handlePreview}
-        totalFromInr={initialTrip.totalFromInr}
+        totalFromInr={totalFromInr}
       />
 
       {/* Tab strip */}
