@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import type { DestinationState } from '@/app/(dashboard)/trips/[id]/types';
 import { isHotelItem } from '@/app/(dashboard)/trips/[id]/editor-utils';
 import type { ParsedRate } from '@/lib/db/schema';
@@ -8,6 +9,7 @@ import type { ParsedRate } from '@/lib/db/schema';
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
+  tripId: number;
   tripLabel: string;
   clientName: string | null;
   clientWa: string | null;
@@ -15,6 +17,7 @@ interface ShareModalProps {
   previewKey: string | null;
   destinations: DestinationState[];
   totalFromInr: number | null;
+  personalNote?: string | null;
 }
 
 function buildWaMessage(
@@ -120,11 +123,13 @@ function buildEmailDraft(
 
 export function ShareModal({
   isOpen, onClose,
-  tripLabel, clientName, clientWa, clientEmail,
-  previewKey, destinations, totalFromInr,
+  tripId, tripLabel, clientName, clientWa, clientEmail,
+  previewKey, destinations, totalFromInr, personalNote,
 }: ShareModalProps) {
-  const [tab, setTab] = useState<'wa' | 'email'>('wa');
-  const [copied, setCopied] = useState<'wa' | 'email' | null>(null);
+  const [tab, setTab] = useState<'wa' | 'email' | 'ai'>('wa');
+  const [copied, setCopied] = useState<'wa' | 'email' | 'ai' | null>(null);
+  const [aiSummary, setAiSummary] = useState('');
+  const [generating, setGenerating] = useState(false);
 
   if (!isOpen) return null;
 
@@ -134,12 +139,39 @@ export function ShareModal({
   const waMessage = buildWaMessage(tripLabel, clientName, previewUrl, destinations, totalFromInr);
   const emailDraft = buildEmailDraft(tripLabel, clientName, previewUrl, destinations, totalFromInr);
 
-  function copy(type: 'wa' | 'email') {
-    const text = type === 'wa' ? waMessage : emailDraft;
+  function copy(type: 'wa' | 'email' | 'ai') {
+    const text = type === 'wa' ? waMessage : type === 'email' ? emailDraft : aiSummary;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(type);
       setTimeout(() => setCopied(null), 2000);
     }).catch(() => {});
+  }
+
+  async function handleGenerateAI() {
+    setGenerating(true);
+    try {
+      const destPayload = destinations.map(d => ({
+        name: d.name,
+        checkin: d.checkin,
+        checkout: d.checkout,
+        nights: d.nights,
+        hotels: d.items.filter(isHotelItem).map(h => h.title),
+      }));
+      const res = await fetch(`/api/trips/${tripId}/wa-summary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tripLabel, clientName, destinations: destPayload,
+          totalFromInr, previewUrl: previewUrl || null, personalNote: personalNote ?? null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { text?: string };
+        if (data.text) setAiSummary(data.text);
+      }
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function sendWa() {
@@ -150,6 +182,7 @@ export function ShareModal({
 
   const tabs = [
     { id: 'wa' as const, label: 'WhatsApp' },
+    { id: 'ai' as const, label: 'AI summary' },
     { id: 'email' as const, label: 'Email draft' },
   ];
 
@@ -207,17 +240,64 @@ export function ShareModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5" style={{ scrollbarWidth: 'thin', scrollbarColor: '#C9D2CC transparent' }}>
-          <textarea
-            value={tab === 'wa' ? waMessage : emailDraft}
-            readOnly
-            className="w-full font-mono text-[11px] leading-relaxed bg-white rounded-[4px] p-4 resize-none outline-none"
-            style={{
-              border: '1px solid rgba(22,26,23,0.1)',
-              minHeight: 280,
-              color: '#4A514B',
-            }}
-            rows={16}
-          />
+          {tab === 'ai' ? (
+            <div>
+              {!aiSummary ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center mb-3"
+                    style={{ background: 'rgba(169,139,82,0.1)' }}
+                  >
+                    <Sparkles size={18} style={{ color: '#A98B52' }} />
+                  </div>
+                  <p className="font-sans text-[13px] text-ink mb-1">Generate a conversational summary</p>
+                  <p className="font-sans text-[11px] text-ink-mute max-w-xs leading-relaxed mb-5">
+                    5–8 lines that capture the trip essence. A warm intro, not a rate sheet.
+                  </p>
+                  <button
+                    onClick={handleGenerateAI}
+                    disabled={generating}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[4px] text-[12px] font-medium cursor-pointer disabled:opacity-40 transition-opacity"
+                    style={{ background: '#A98B52', color: 'white', border: 'none' }}
+                  >
+                    {generating ? <Loader2 size={12} className="spin" /> : <Sparkles size={12} />}
+                    {generating ? 'Generating…' : 'Generate with AI'}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <textarea
+                    value={aiSummary}
+                    onChange={e => setAiSummary(e.target.value)}
+                    className="w-full font-sans text-[12px] leading-relaxed bg-white rounded-[4px] p-4 resize-none outline-none"
+                    style={{ border: '1px solid rgba(22,26,23,0.1)', minHeight: 220, color: '#4A514B' }}
+                    rows={12}
+                  />
+                  <button
+                    onClick={handleGenerateAI}
+                    disabled={generating}
+                    className="mt-2 inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.06em] px-2 py-[3px] rounded-[2px] cursor-pointer disabled:opacity-40 transition-opacity"
+                    style={{ background: 'rgba(169,139,82,0.08)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.22)' }}
+                  >
+                    {generating ? <Loader2 size={9} className="spin" /> : <Sparkles size={9} />}
+                    Regenerate
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <textarea
+              value={tab === 'wa' ? waMessage : emailDraft}
+              readOnly
+              className="w-full font-mono text-[11px] leading-relaxed bg-white rounded-[4px] p-4 resize-none outline-none"
+              style={{
+                border: '1px solid rgba(22,26,23,0.1)',
+                minHeight: 280,
+                color: '#4A514B',
+              }}
+              rows={16}
+            />
+          )}
         </div>
 
         {/* Actions */}
@@ -240,6 +320,41 @@ export function ShareModal({
               >
                 {copied === 'wa' ? '✓ Copied' : '⎘ Copy text'}
               </button>
+            </div>
+          ) : tab === 'ai' ? (
+            <div className="flex items-center gap-2">
+              {aiSummary ? (
+                <>
+                  <button
+                    onClick={() => {
+                      const num = clientWa ? clientWa.replace(/\D/g, '') : '919870400235';
+                      window.open(`https://wa.me/${num}?text=${encodeURIComponent(aiSummary)}`, '_blank');
+                    }}
+                    disabled={!previewKey}
+                    className="inline-flex items-center gap-[6px] px-4 py-2 rounded-[4px] text-[12px] font-sans font-medium text-white cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-40"
+                    style={{ background: '#25D366', border: 'none' }}
+                  >
+                    Send via WhatsApp
+                  </button>
+                  <button
+                    onClick={() => copy('ai')}
+                    className="inline-flex items-center gap-[6px] px-3 py-2 rounded-[4px] text-[11px] font-mono cursor-pointer transition-colors"
+                    style={{ background: 'rgba(22,26,23,0.05)', border: '1px solid rgba(22,26,23,0.1)', color: '#4A514B' }}
+                  >
+                    {copied === 'ai' ? '✓ Copied' : '⎘ Copy'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleGenerateAI}
+                  disabled={generating}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[4px] text-[12px] font-medium cursor-pointer disabled:opacity-40 transition-opacity"
+                  style={{ background: '#A98B52', color: 'white', border: 'none' }}
+                >
+                  {generating ? <Loader2 size={12} className="spin" /> : <Sparkles size={12} />}
+                  {generating ? 'Generating…' : 'Generate with AI'}
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-2">

@@ -793,6 +793,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       <ShareModal
         isOpen={showShare}
         onClose={() => setShowShare(false)}
+        tripId={id}
         tripLabel={label}
         clientName={clientName}
         clientWa={clientWa}
@@ -800,6 +801,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         previewKey={initialTrip.previewKey ?? null}
         destinations={destinations}
         totalFromInr={totalFromInr}
+        personalNote={personalNote}
       />
       {/* Topbar */}
       <Topbar
