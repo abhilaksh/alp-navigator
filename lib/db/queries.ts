@@ -1,4 +1,4 @@
-import { desc, and, eq, isNull, count, min, isNotNull, ne } from 'drizzle-orm';
+import { desc, and, eq, isNull, count, min, isNotNull, ne, sum, sql } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
   activityLogs,
@@ -319,4 +319,62 @@ export async function getClientsForUser() {
     .from(clients)
     .where(eq(clients.teamId, userWithTeam.teamId))
     .orderBy(clients.name);
+}
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+export async function getAnalyticsForUser() {
+  const user = await getUser();
+  if (!user) return null;
+
+  const rows = await db
+    .select({
+      status: trips.status,
+      cnt: count(trips.id).as('cnt'),
+      totalInr: sum(trips.totalFromInr).as('total_inr'),
+      createdAt: trips.createdAt,
+    })
+    .from(trips)
+    .where(eq(trips.userId, user.id))
+    .groupBy(trips.status);
+
+  const statusMap: Record<string, { count: number; total: number }> = {};
+  for (const r of rows) {
+    statusMap[r.status] = {
+      count: Number(r.cnt),
+      total: Number(r.totalInr ?? 0),
+    };
+  }
+
+  // Monthly trip creation for the last 6 months
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const monthlyRows = await db
+    .select({
+      month: sql<string>`DATE_FORMAT(created_at, '%Y-%m')`.as('month'),
+      cnt: count(trips.id).as('cnt'),
+    })
+    .from(trips)
+    .where(and(
+      eq(trips.userId, user.id),
+      sql`created_at >= ${sixMonthsAgo.toISOString().slice(0, 10)}`,
+    ))
+    .groupBy(sql`DATE_FORMAT(created_at, '%Y-%m')`)
+    .orderBy(sql`DATE_FORMAT(created_at, '%Y-%m')`);
+
+  const monthly = monthlyRows.map(r => ({
+    month: r.month,
+    count: Number(r.cnt),
+  }));
+
+  const booked = statusMap['booked'] ?? { count: 0, total: 0 };
+  const sent = statusMap['sent'] ?? { count: 0, total: 0 };
+  const accepted = statusMap['accepted'] ?? { count: 0, total: 0 };
+  const draft = statusMap['draft'] ?? { count: 0, total: 0 };
+  const total = Object.values(statusMap).reduce((a, b) => a + b.count, 0);
+  const totalBooked = booked.total + accepted.total;
+  const avgTripValue = booked.count > 0 ? Math.round(booked.total / booked.count) : null;
+
+  return { draft, sent, accepted, booked, total, totalBooked, avgTripValue, monthly };
 }

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getTripsWithDetailsForUser, getHoldExpiryByTrip, getCommissionSummaryForUser, getUser } from '@/lib/db/queries';
+import { getTripsWithDetailsForUser, getHoldExpiryByTrip, getCommissionSummaryForUser, getUser, getAnalyticsForUser } from '@/lib/db/queries';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,10 +28,11 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
 
 export default async function DashboardPage() {
   const user = await getUser();
-  const [allTrips, holdMap, commission] = await Promise.all([
+  const [allTrips, holdMap, commission, analytics] = await Promise.all([
     getTripsWithDetailsForUser(false),
     user ? getHoldExpiryByTrip(user.id) : Promise.resolve(new Map<number, string>()),
     getCommissionSummaryForUser(),
+    getAnalyticsForUser(),
   ]);
 
   const now = new Date();
@@ -220,6 +221,60 @@ export default async function DashboardPage() {
               )}
             </div>
           </div>
+        </section>
+      )}
+
+      {/* ── Analytics ──────────────────────────────────────────────────── */}
+      {analytics && analytics.total > 0 && (
+        <section>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] mb-4" style={{ color: '#8A9189' }}>
+            Performance
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            {([
+              { label: 'Total trips', value: analytics.total, sub: null },
+              { label: 'Booked', value: analytics.booked.count, sub: analytics.booked.count > 0 && analytics.total > 0 ? `${Math.round(analytics.booked.count / analytics.total * 100)}% conversion` : null },
+              { label: 'Avg trip value', value: analytics.avgTripValue ? `₹${analytics.avgTripValue.toLocaleString('en-IN')}` : '—', sub: 'booked only' },
+              { label: 'Booked revenue', value: analytics.totalBooked > 0 ? `₹${Math.round(analytics.totalBooked / 100000).toLocaleString('en-IN')}L` : '—', sub: null },
+            ] as const).map(({ label, value, sub }) => (
+              <div
+                key={label}
+                className="px-4 py-3 rounded-[4px]"
+                style={{ background: '#EDEAE1', border: '1px solid rgba(22,26,23,0.06)' }}
+              >
+                <p className="font-mono text-[9px] uppercase tracking-[0.1em] mb-1" style={{ color: '#8A9189' }}>{label}</p>
+                <p className="font-mono text-[18px] leading-none" style={{ color: '#161A17' }}>{value}</p>
+                {sub && <p className="text-[9px] mt-1" style={{ color: '#8A9189' }}>{sub}</p>}
+              </div>
+            ))}
+          </div>
+
+          {/* Conversion funnel */}
+          {analytics.total > 0 && (() => {
+            const stages = [
+              { label: 'Draft', count: analytics.draft.count, color: '#8A9189' },
+              { label: 'Sent', count: analytics.sent.count, color: '#A98B52' },
+              { label: 'Accepted', count: analytics.accepted.count, color: '#1E3A2F' },
+              { label: 'Booked', count: analytics.booked.count, color: '#2E6B45' },
+            ];
+            const max = Math.max(...stages.map(s => s.count), 1);
+            return (
+              <div className="space-y-2">
+                {stages.map(({ label, count: c, color }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="w-16 text-[10px]" style={{ color: '#8A9189' }}>{label}</span>
+                    <div className="flex-1 rounded-full overflow-hidden" style={{ background: 'rgba(22,26,23,0.06)', height: 6 }}>
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${Math.max(c / max * 100, 2)}%`, background: color }}
+                      />
+                    </div>
+                    <span className="font-mono text-[11px] w-6 text-right" style={{ color: '#4A514B' }}>{c}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </section>
       )}
 
