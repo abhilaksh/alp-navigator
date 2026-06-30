@@ -8,6 +8,7 @@ import { trips } from '@/lib/db/schema';
 import { eq, sql as drizzleSql } from 'drizzle-orm';
 import type { Metadata } from 'next';
 import { AcceptanceBlock } from '@/components/preview/acceptance-block';
+import { HotelComparisonBlock } from '@/components/preview/hotel-comparison-block';
 
 type Props = { params: Promise<{ key: string }> };
 
@@ -366,7 +367,37 @@ export default async function PreviewPage({ params }: Props) {
 
               {/* Hotels */}
               {hotels.length > 0 ? (
-                <div className="ml-[36px] space-y-10">
+                <div className="ml-[36px]">
+                  {hotels.length >= 2 ? (
+                    /* ── Comparison layout (2+ hotels) ──────────────────────── */
+                    <HotelComparisonBlock
+                      storageKey={`pref_${trip.previewKey}_dest_${dest.id}`}
+                      options={hotels.map((item) => {
+                        const hotel = item.hotelDetails;
+                        const confirmedRate = hotel?.rates.find(r => r.isConfirmed);
+                        const displayRate = confirmedRate ?? hotel?.rates.find(r => r.status === 'done') ?? hotel?.rates[0];
+                        const parsed = displayRate?.parsedData ? (JSON.parse(displayRate.parsedData) as ParsedRate) : null;
+                        return {
+                          id: item.id,
+                          title: item.title,
+                          stars: hotel?.stars ?? null,
+                          recommendation: hotel?.recommendation ?? null,
+                          totalInr: parsed?.total_inr ?? null,
+                          roomType: parsed?.room_type ?? null,
+                          boardBasis: parsed?.board_basis ?? null,
+                          breakfastIncluded: parsed?.breakfast_included ?? false,
+                          cancellationFree: parsed?.cancellation_free ?? null,
+                          cancellationDeadline: parsed?.cancellation_deadline ?? null,
+                          nights: parsed?.nights ?? null,
+                          checkin: parsed?.checkin ?? null,
+                          checkout: parsed?.checkout ?? null,
+                          perks: [...(parsed?.perks ?? []), ...(parsed?.inclusions ?? [])],
+                        };
+                      })}
+                    />
+                  ) : (
+                  /* ── Single hotel layout ───────────────────────────────────── */
+                  <div className="space-y-10">
                   {hotels.map((item, hi) => {
                     const hotel = item.hotelDetails;
                     const confirmedRate = hotel?.rates.find(r => r.isConfirmed);
@@ -569,6 +600,8 @@ export default async function PreviewPage({ params }: Props) {
                       </div>
                     );
                   })}
+                  </div>
+                  )}
                 </div>
               ) : (
                 <p className="ml-[36px] text-[13px] italic" style={{ color: '#8A9189' }}>
