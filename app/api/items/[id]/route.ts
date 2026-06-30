@@ -29,6 +29,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const {
     title, detailsJson, confirmedTotalInr, startDate, endDate,
     bookingStatus, bookingRef, sortOrder, cancellationFreeUntil, visaRequired,
+    specialRequests,
   } = body;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -42,6 +43,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (sortOrder !== undefined) updates.sortOrder = sortOrder;
   if (cancellationFreeUntil !== undefined) updates.cancellationFreeUntil = cancellationFreeUntil;
   if (visaRequired !== undefined) updates.visaRequired = visaRequired;
+  if (specialRequests !== undefined) updates.specialRequests = specialRequests;
 
   await db.update(tripItems).set(updates).where(eq(tripItems.id, itemId));
   const [updated] = await db.select().from(tripItems).where(eq(tripItems.id, itemId)).limit(1);

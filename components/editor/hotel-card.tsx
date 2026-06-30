@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { ChevronUp, ChevronDown, X, MapPin, Sparkles } from 'lucide-react';
 import { RateCard, type RateState } from './rate-card';
+import { SpecialRequestsPanel } from './special-requests-panel';
 import type { ParsedRate } from '@/lib/db/schema';
 
 const BADGE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -40,6 +41,7 @@ export interface HotelItemState {
   sortOrder: number;
   cancellationFreeUntil: string | null;
   visaRequired: number;
+  specialRequests: string | null;
   hotelDetails: HotelDetailState | null;
 }
 
@@ -62,6 +64,7 @@ interface HotelCardProps {
   onHoldExpiryChange: (hotelDetailId: number, date: string | null) => void;
   onCancellationFreeUntilChange: (itemId: number, date: string | null) => void;
   onVisaRequiredChange: (itemId: number, value: number) => void;
+  onSpecialRequestsChange: (itemId: number, json: string) => void;
 }
 
 function renderStars(n: number | null) {
@@ -73,7 +76,7 @@ export function HotelCard({
   item, index,
   onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
-  onHoldExpiryChange, onCancellationFreeUntilChange, onVisaRequiredChange,
+  onHoldExpiryChange, onCancellationFreeUntilChange, onVisaRequiredChange, onSpecialRequestsChange,
 }: HotelCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingRemove, setPendingRemove] = useState(false);
@@ -430,6 +433,13 @@ export function HotelCard({
                 </button>
               </div>
             )}
+
+            {/* Special requests */}
+            <SpecialRequestsPanel
+              itemId={item.id}
+              initialRequests={item.specialRequests}
+              onChange={onSpecialRequestsChange}
+            />
           </>
         )}
 

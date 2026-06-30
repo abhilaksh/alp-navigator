@@ -146,6 +146,7 @@ export const tripItems = mysqlTable('trip_items', {
   detailsJson: text('details_json'),                      // type-specific JSON for non-hotel types
   cancellationFreeUntil: date('cancellation_free_until'), // confirmed booking: last free-cancel date
   visaRequired: int('visa_required').notNull().default(0), // 1 = visa required for Indian passport
+  specialRequests: text('special_requests'),              // JSON array of SpecialRequest objects
   sortOrder: int('sort_order').notNull().default(0),
   addedAt: timestamp('added_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),

@@ -1,0 +1,1 @@
+ALTER TABLE `trip_items` ADD COLUMN IF NOT EXISTS `special_requests` text DEFAULT NULL;

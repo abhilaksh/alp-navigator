@@ -253,7 +253,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       const newItem: HotelItemState = {
         id: data.item.id, type: 'hotel', title: hotel.name,
         bookingStatus: 'researching', sortOrder: hotelItems.length,
-        cancellationFreeUntil: null, visaRequired: 0,
+        cancellationFreeUntil: null, visaRequired: 0, specialRequests: null,
         hotelDetails: {
           id: data.hotelDetail.id, itemId: data.item.id,
           stars: hotel.stars, rating: hotel.rating, locationScore: null,
@@ -279,7 +279,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       const newItem: HotelItemState = {
         id: data.item.id, type: 'hotel', title: 'New hotel',
         bookingStatus: 'researching', sortOrder: hotelItems.length,
-        cancellationFreeUntil: null, visaRequired: 0,
+        cancellationFreeUntil: null, visaRequired: 0, specialRequests: null,
         hotelDetails: {
           id: data.hotelDetail.id, itemId: data.item.id,
           stars: null, rating: null, locationScore: null,
@@ -391,6 +391,14 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ visaRequired: value }),
     }).catch(() => {});
+  }
+
+  function handleSpecialRequestsChange(itemId: number, json: string) {
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => i.id !== itemId ? i : { ...i, specialRequests: json }),
+    })));
+    // PATCH is already fired inside SpecialRequestsPanel; this just syncs local state
   }
 
   // ─── Rate mutations ──────────────────────────────────────────────────────────
@@ -800,6 +808,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                         onHoldExpiryChange={handleHoldExpiryChange}
                         onCancellationFreeUntilChange={handleCancellationFreeUntilChange}
                         onVisaRequiredChange={handleVisaRequiredChange}
+                        onSpecialRequestsChange={handleSpecialRequestsChange}
                       />
                     );
                   }

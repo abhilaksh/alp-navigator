@@ -18,6 +18,7 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
           bookingStatus: i.bookingStatus, sortOrder: i.sortOrder,
           cancellationFreeUntil: (i as { cancellationFreeUntil?: string | null }).cancellationFreeUntil ?? null,
           visaRequired: (i as { visaRequired?: number }).visaRequired ?? 0,
+          specialRequests: (i as { specialRequests?: string | null }).specialRequests ?? null,
           hotelDetails: i.hotelDetails ? {
             id: i.hotelDetails.id, itemId: i.hotelDetails.itemId,
             stars: i.hotelDetails.stars, rating: i.hotelDetails.rating,
