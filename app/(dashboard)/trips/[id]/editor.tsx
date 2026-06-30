@@ -20,6 +20,7 @@ import { VersionHistoryPanel } from '@/components/editor/version-history-panel';
 import { ChangeRequestsPanel } from '@/components/editor/change-requests-panel';
 import { IntakePanel } from '@/components/editor/intake-panel';
 import { ResearchPanel } from '@/components/editor/research-panel';
+import { EngagementPanel } from '@/components/editor/engagement-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
-  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes' | 'research'>('editor');
+  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes' | 'research' | 'engagement'>('editor');
   const [changeRequestOpenCount, setChangeRequestOpenCount] = useState(0);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [showShare, setShowShare]   = useState(false);
@@ -1096,6 +1097,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
           )}
         </button>
+
+        {/* Engagement tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'engagement' ? 'editor' : 'engagement')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'engagement' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'engagement' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Engagement
+          {activeView === 'engagement' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
       </nav>
 
       {/* Main editor body */}
@@ -1193,6 +1210,25 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             <ChangeRequestsPanel
               tripId={id}
               openCount={setChangeRequestOpenCount}
+            />
+          </div>
+        )}
+
+        {/* Engagement view */}
+        {activeView === 'engagement' && (
+          <div className="flex-1 overflow-y-auto" style={{ background: '#F6F4EE' }}>
+            <EngagementPanel
+              tripId={id}
+              tripLabel={label}
+              status={(initialTrip as { status: string }).status}
+              createdAt={initialTrip.createdAt}
+              updatedAt={initialTrip.updatedAt}
+              firstViewedAt={(initialTrip as { firstViewedAt?: number | null }).firstViewedAt ?? null}
+              viewCount={(initialTrip as { viewCount?: number }).viewCount ?? 0}
+              clientAcceptedAt={(initialTrip as { clientAcceptedAt?: number | null }).clientAcceptedAt ?? null}
+              previewKey={initialTrip.previewKey ?? null}
+              clientName={clientName}
+              clientWa={clientWa}
             />
           </div>
         )}
