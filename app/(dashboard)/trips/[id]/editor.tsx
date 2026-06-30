@@ -221,7 +221,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           recommendation: null, foraId: hotel.foraId, hotelWebsite: null,
           thumbnail: hotel.thumbnail, lat: hotel.lat ?? null,
           lng: hotel.lng ?? null, googleRateInr: hotel.googleRateInr,
-          rates: [],
+          holdExpiresAt: null, rates: [],
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
@@ -245,7 +245,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           stars: null, rating: null, locationScore: null,
           recommendation: null, foraId: null, hotelWebsite: null,
           thumbnail: null, lat: null, lng: null, googleRateInr: null,
-          rates: [],
+          holdExpiresAt: null, rates: [],
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
