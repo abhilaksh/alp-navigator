@@ -18,6 +18,7 @@ import { PaymentPanel } from '@/components/editor/payment-panel';
 import { VersionHistoryPanel } from '@/components/editor/version-history-panel';
 import { ChangeRequestsPanel } from '@/components/editor/change-requests-panel';
 import { IntakePanel } from '@/components/editor/intake-panel';
+import { ResearchPanel } from '@/components/editor/research-panel';
 
 // ─── NarrativeBlock ───────────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
-  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes'>('editor');
+  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes' | 'research'>('editor');
   const [changeRequestOpenCount, setChangeRequestOpenCount] = useState(0);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [showShare, setShowShare]   = useState(false);
@@ -945,6 +946,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         {/* Separator */}
         <div className="mx-2 my-2.5" style={{ width: 1, background: '#C9D2CC', flexShrink: 0 }} />
 
+        {/* Research tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'research' ? 'editor' : 'research')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'research' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'research' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Research
+          {activeView === 'research' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
+
         {/* Itinerary tab */}
         <button
           onClick={() => setActiveView(v => v === 'itinerary' ? 'editor' : 'itinerary')}
@@ -1040,6 +1057,16 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         {/* Itinerary view */}
         {activeView === 'itinerary' && (
           <ItineraryBuilder tripId={id} destinations={destinations} />
+        )}
+
+        {/* Research view */}
+        {activeView === 'research' && (
+          <ResearchPanel
+            destinations={destinations}
+            onPreferredStatusChange={handlePreferredStatusChange}
+            onEliminationNoteChange={handleEliminationNoteChange}
+            onFamiliarityChange={handleFamiliarityChange}
+          />
         )}
 
         {/* Bookings view */}
