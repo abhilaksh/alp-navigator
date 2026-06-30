@@ -190,6 +190,25 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     return msLeft < 48 * 60 * 60 * 1000;
   });
 
+  const expiredRates = useMemo(() => {
+    const now = Date.now();
+    const results: { hotelTitle: string; rateLabel: string }[] = [];
+    for (const dest of destinations) {
+      for (const item of dest.items) {
+        if (!isHotelItem(item) || !item.hotelDetails) continue;
+        for (let i = 0; i < item.hotelDetails.rates.length; i++) {
+          const r = item.hotelDetails.rates[i];
+          if (r.status !== 'done') continue;
+          if (!r.expiresAt) continue;
+          if (new Date(r.expiresAt + 'T23:59:59').getTime() < now) {
+            results.push({ hotelTitle: item.title, rateLabel: `Rate ${i + 1}` });
+          }
+        }
+      }
+    }
+    return results;
+  }, [destinations]);
+
   // ─── Auto-save (debounced 1 s) ──────────────────────────────────────────────
   const scheduleSave = useCallback((patch: object) => {
     clearTimeout(saveTimer.current ?? undefined);
@@ -620,6 +639,15 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source }),
+    }).catch(() => {});
+  }
+
+  function handleRateExpiryChange(rateId: number, expiresAt: string | null) {
+    setDests(prev => updateRate(prev, rateId, r => ({ ...r, expiresAt: expiresAt ?? null })));
+    fetch(`/api/rates/${rateId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresAt }),
     }).catch(() => {});
   }
 
@@ -1060,6 +1088,16 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                 </div>
               )}
 
+              {/* Expired rates banner */}
+              {expiredRates.length > 0 && (
+                <div className="mb-3 px-3 py-2 rounded-[4px] text-xs font-sans" style={{ background: 'rgba(139,47,47,0.07)', border: '1px solid rgba(139,47,47,0.2)', color: '#7f1d1d' }}>
+                  <span className="font-semibold">Quoted rates expired</span>
+                  {' — '}
+                  {expiredRates.map(r => `${r.hotelTitle} (${r.rateLabel})`).join(', ')}
+                  {'. Re-check pricing before sending the proposal.'}
+                </div>
+              )}
+
               {/* Hotels + line items count row */}
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-semibold tracking-[0.1em] uppercase text-ink-mute">
@@ -1104,6 +1142,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                         onSpecialRequestsChange={handleSpecialRequestsChange}
                         onBookingStatusChange={handleBookingStatusChange}
                         onBookingRefChange={handleBookingRefChange}
+                        onRateExpiryChange={handleRateExpiryChange}
                       />
                     );
                   }

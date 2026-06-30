@@ -202,6 +202,7 @@ export const rates = mysqlTable('rates', {
   proposals: text('proposals'),             // JSON: ParsedRate[]
   errorMessage: text('error_message'),
   history: text('history'),                 // JSON: [{parsed, rawText, timestamp}]
+  expiresAt: date('expires_at'),            // rate validity deadline (when this quoted price expires)
   sortOrder: int('sort_order').notNull().default(0),
   addedAt: timestamp('added_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),

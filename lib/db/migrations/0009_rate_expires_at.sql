@@ -1,0 +1,1 @@
+ALTER TABLE `rates` ADD COLUMN IF NOT EXISTS `expires_at` date DEFAULT NULL;

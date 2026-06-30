@@ -10,6 +10,7 @@ export type RateRow = {
   parsedData: string | null; proposals: string | null;
   errorMessage: string | null; history: string | null; sortOrder: number;
   updatedAt: Date | string | null;
+  expiresAt: string | null;
 };
 
 export type VisaInfoState = {

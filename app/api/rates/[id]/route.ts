@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { status, rawText, parsedData, proposals, isConfirmed, sortOrder } = body;
+  const { status, rawText, parsedData, proposals, isConfirmed, sortOrder, expiresAt, errorMessage } = body;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (status !== undefined) updates.status = status;
@@ -31,6 +31,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (proposals !== undefined) updates.proposals = JSON.stringify(proposals);
   if (isConfirmed !== undefined) updates.isConfirmed = isConfirmed ? 1 : 0;
   if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+  if (expiresAt !== undefined) updates.expiresAt = expiresAt || null;
+  if (errorMessage !== undefined) updates.errorMessage = errorMessage || null;
 
   await db.update(rates).set(updates).where(eq(rates.id, rateId));
 

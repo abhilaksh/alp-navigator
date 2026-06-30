@@ -36,6 +36,7 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
               sourceLabel: r.sourceLabel ?? null,
               history: r.history ?? null,
               updatedAt: r.updatedAt ?? null,
+              expiresAt: (r as { expiresAt?: string | null }).expiresAt ?? null,
             })) as RateRow[],
           } : null,
         } as HotelItemState;

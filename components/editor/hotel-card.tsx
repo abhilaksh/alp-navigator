@@ -68,6 +68,7 @@ interface HotelCardProps {
   onSpecialRequestsChange: (itemId: number, json: string) => void;
   onBookingStatusChange: (itemId: number, status: string) => void;
   onBookingRefChange: (itemId: number, ref: string) => void;
+  onRateExpiryChange?: (rateId: number, expiresAt: string | null) => void;
 }
 
 function renderStars(n: number | null) {
@@ -90,7 +91,7 @@ export function HotelCard({
   onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
   onHoldExpiryChange, onCancellationFreeUntilChange, onVisaRequiredChange, onSpecialRequestsChange,
-  onBookingStatusChange, onBookingRefChange,
+  onBookingStatusChange, onBookingRefChange, onRateExpiryChange,
 }: HotelCardProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [pendingRemove, setPendingRemove] = useState(false);
@@ -492,6 +493,7 @@ export function HotelCard({
                     onParse={onParseRate}
                     onSourceChange={onSourceChange}
                     onSelectProposal={onSelectProposal}
+                    onExpiryChange={onRateExpiryChange}
                   />
                 ))}
                 <button

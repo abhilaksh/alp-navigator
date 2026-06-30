@@ -18,6 +18,7 @@ export interface RateState {
   history: string | null;
   sortOrder: number;
   updatedAt: Date | string | null;
+  expiresAt: string | null;
 }
 
 interface RateCardProps {
@@ -27,6 +28,7 @@ interface RateCardProps {
   onParse: (rateId: number, rawText: string) => Promise<void>;
   onSourceChange: (rateId: number, source: string) => void;
   onSelectProposal: (rateId: number, proposal: ParsedRate) => void;
+  onExpiryChange?: (rateId: number, expiresAt: string | null) => void;
 }
 
 const SOURCES = [
@@ -43,10 +45,11 @@ function inr(n: number | undefined | null): string {
   return `₹${n.toLocaleString('en-IN')}`;
 }
 
-export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSelectProposal }: RateCardProps) {
+export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSelectProposal, onExpiryChange }: RateCardProps) {
   const [expanded, setExpanded] = useState(true);
   const [localText, setLocalText] = useState(rate.rawText ?? '');
   const [parsing, setParsing] = useState(false);
+  const [showExpiryInput, setShowExpiryInput] = useState(false);
 
   const parsed: ParsedRate | null = rate.parsedData ? (() => { try { return JSON.parse(rate.parsedData); } catch { return null; } })() : null;
   const proposals: ParsedRate[] = rate.proposals ? (() => { try { return JSON.parse(rate.proposals); } catch { return []; } })() : [];
@@ -60,6 +63,17 @@ export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSel
     const parsedMs = new Date(rate.updatedAt).getTime();
     if (isNaN(parsedMs)) return false;
     return Date.now() - parsedMs > 7 * 24 * 60 * 60 * 1000;
+  })();
+
+  const expiryInfo = (() => {
+    if (!rate.expiresAt) return null;
+    const msLeft = new Date(rate.expiresAt + 'T23:59:59').getTime() - Date.now();
+    const hoursLeft = msLeft / 3600000;
+    if (msLeft < 0) return { label: 'Expired', color: '#8B2F2F', bg: 'rgba(139,47,47,0.1)', border: 'rgba(139,47,47,0.25)' };
+    if (hoursLeft < 24) return { label: `${Math.ceil(hoursLeft)}h left`, color: '#8B2F2F', bg: 'rgba(139,47,47,0.08)', border: 'rgba(139,47,47,0.2)' };
+    if (hoursLeft < 48) return { label: 'Exp. tomorrow', color: '#b45309', bg: 'rgba(217,119,6,0.08)', border: 'rgba(217,119,6,0.2)' };
+    const daysLeft = Math.ceil(msLeft / 86400000);
+    return { label: `Exp. ${daysLeft}d`, color: '#166534', bg: 'rgba(22,101,52,0.07)', border: 'rgba(22,101,52,0.2)' };
   })();
 
   async function handleParse() {
@@ -151,6 +165,43 @@ export function RateCard({ rate, index, onRemove, onParse, onSourceChange, onSel
           >
             Stale
           </span>
+        )}
+
+        {/* Expiry badge / date input */}
+        {showExpiryInput ? (
+          <input
+            type="date"
+            autoFocus
+            defaultValue={rate.expiresAt ?? ''}
+            onClick={e => e.stopPropagation()}
+            onChange={e => { e.stopPropagation(); }}
+            onBlur={e => {
+              e.stopPropagation();
+              const val = e.target.value || null;
+              onExpiryChange?.(rate.id, val);
+              setShowExpiryInput(false);
+            }}
+            className="font-mono text-[10px] border border-glacier rounded-sm px-1.5 py-px outline-none flex-shrink-0"
+            style={{ background: '#F6F4EE', color: '#161A17', minWidth: 110 }}
+          />
+        ) : expiryInfo ? (
+          <button
+            onClick={e => { e.stopPropagation(); setShowExpiryInput(true); }}
+            className="font-mono text-[9px] font-medium px-[5px] py-px rounded-sm flex-shrink-0 cursor-pointer"
+            title="Click to change expiry date"
+            style={{ background: expiryInfo.bg, color: expiryInfo.color, border: `1px solid ${expiryInfo.border}` }}
+          >
+            {expiryInfo.label}
+          </button>
+        ) : (
+          <button
+            onClick={e => { e.stopPropagation(); setShowExpiryInput(true); }}
+            className="font-mono text-[9px] px-[5px] py-px rounded-sm flex-shrink-0 cursor-pointer opacity-0 group-hover/rate:opacity-60 hover:!opacity-100 transition-opacity"
+            style={{ background: 'transparent', color: '#8A9189', border: '1px dashed #C9D2CC' }}
+            title="Set rate expiry date"
+          >
+            + Expiry
+          </button>
         )}
 
         <button
