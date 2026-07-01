@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
+import { isDuplicateColumnError } from '@/lib/db/migrate-utils';
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
@@ -8,9 +9,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    await db.execute(sql`ALTER TABLE \`trips\` ADD COLUMN IF NOT EXISTS \`intake_status\` varchar(30) DEFAULT 'new_inquiry'`);
-    await db.execute(sql`ALTER TABLE \`trips\` ADD COLUMN IF NOT EXISTS \`acknowledged_at\` bigint DEFAULT NULL`);
-    await db.execute(sql`ALTER TABLE \`trips\` ADD COLUMN IF NOT EXISTS \`brief_complete_at\` bigint DEFAULT NULL`);
+    try {
+      await db.execute(sql`ALTER TABLE \`trips\` ADD COLUMN \`intake_status\` varchar(30) DEFAULT 'new_inquiry'`);
+    } catch (e) { if (!isDuplicateColumnError(e)) throw e; }
+    try {
+      await db.execute(sql`ALTER TABLE \`trips\` ADD COLUMN \`acknowledged_at\` bigint DEFAULT NULL`);
+    } catch (e) { if (!isDuplicateColumnError(e)) throw e; }
+    try {
+      await db.execute(sql`ALTER TABLE \`trips\` ADD COLUMN \`brief_complete_at\` bigint DEFAULT NULL`);
+    } catch (e) { if (!isDuplicateColumnError(e)) throw e; }
     return NextResponse.json({ ok: true, migration: '0008_intake_status', message: 'intake_status, acknowledged_at, brief_complete_at added to trips' });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
+import { isDuplicateColumnError } from '@/lib/db/migrate-utils';
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
@@ -9,10 +10,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN IF NOT EXISTS preferred_status VARCHAR(20) NULL DEFAULT 'none'`);
-    await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN IF NOT EXISTS elimination_note TEXT NULL`);
-    await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN IF NOT EXISTS familiarity_score INT NULL`);
-    await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN IF NOT EXISTS familiarity_date VARCHAR(10) NULL`);
+    try {
+      await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN preferred_status VARCHAR(20) NULL DEFAULT 'none'`);
+    } catch (err) { if (!isDuplicateColumnError(err)) throw err; }
+    try {
+      await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN elimination_note TEXT NULL`);
+    } catch (err) { if (!isDuplicateColumnError(err)) throw err; }
+    try {
+      await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN familiarity_score INT NULL`);
+    } catch (err) { if (!isDuplicateColumnError(err)) throw err; }
+    try {
+      await db.execute(sql`ALTER TABLE hotel_details ADD COLUMN familiarity_date VARCHAR(10) NULL`);
+    } catch (err) { if (!isDuplicateColumnError(err)) throw err; }
     return NextResponse.json({ ok: true, message: 'Migration 0014: preferred_status, elimination_note, familiarity fields added to hotel_details' });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

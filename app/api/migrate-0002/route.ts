@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { sql } from 'drizzle-orm';
 
-const TOKEN = process.env.MIGRATE_TOKEN;
+const TOKEN = process.env.MIGRATION_TOKEN ?? 'alp-migrate-2026';
 
 export async function GET(req: NextRequest) {
   const t = req.nextUrl.searchParams.get('token');
