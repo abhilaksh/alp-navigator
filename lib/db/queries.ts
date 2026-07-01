@@ -332,7 +332,6 @@ export async function getAnalyticsForUser() {
       status: trips.status,
       cnt: count(trips.id).as('cnt'),
       totalInr: sum(trips.totalFromInr).as('total_inr'),
-      createdAt: trips.createdAt,
     })
     .from(trips)
     .where(eq(trips.userId, user.id))
