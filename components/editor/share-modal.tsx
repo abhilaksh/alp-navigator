@@ -322,40 +322,28 @@ export function ShareModal({
               </button>
             </div>
           ) : tab === 'ai' ? (
-            <div className="flex items-center gap-2">
-              {aiSummary ? (
-                <>
-                  <button
-                    onClick={() => {
-                      const num = clientWa ? clientWa.replace(/\D/g, '') : '919870400235';
-                      window.open(`https://wa.me/${num}?text=${encodeURIComponent(aiSummary)}`, '_blank');
-                    }}
-                    disabled={!previewKey}
-                    className="inline-flex items-center gap-[6px] px-4 py-2 rounded-[4px] text-[12px] font-sans font-medium text-white cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-40"
-                    style={{ background: '#25D366', border: 'none' }}
-                  >
-                    Send via WhatsApp
-                  </button>
-                  <button
-                    onClick={() => copy('ai')}
-                    className="inline-flex items-center gap-[6px] px-3 py-2 rounded-[4px] text-[11px] font-mono cursor-pointer transition-colors"
-                    style={{ background: 'rgba(22,26,23,0.05)', border: '1px solid rgba(22,26,23,0.1)', color: '#4A514B' }}
-                  >
-                    {copied === 'ai' ? '✓ Copied' : '⎘ Copy'}
-                  </button>
-                </>
-              ) : (
+            aiSummary ? (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={handleGenerateAI}
-                  disabled={generating}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[4px] text-[12px] font-medium cursor-pointer disabled:opacity-40 transition-opacity"
-                  style={{ background: '#A98B52', color: 'white', border: 'none' }}
+                  onClick={() => {
+                    const num = clientWa ? clientWa.replace(/\D/g, '') : '919870400235';
+                    window.open(`https://wa.me/${num}?text=${encodeURIComponent(aiSummary)}`, '_blank');
+                  }}
+                  disabled={!previewKey}
+                  className="inline-flex items-center gap-[6px] px-4 py-2 rounded-[4px] text-[12px] font-sans font-medium text-white cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-40"
+                  style={{ background: '#25D366', border: 'none' }}
                 >
-                  {generating ? <Loader2 size={12} className="spin" /> : <Sparkles size={12} />}
-                  {generating ? 'Generating…' : 'Generate with AI'}
+                  Send via WhatsApp
                 </button>
-              )}
-            </div>
+                <button
+                  onClick={() => copy('ai')}
+                  className="inline-flex items-center gap-[6px] px-3 py-2 rounded-[4px] text-[11px] font-mono cursor-pointer transition-colors"
+                  style={{ background: 'rgba(22,26,23,0.05)', border: '1px solid rgba(22,26,23,0.1)', color: '#4A514B' }}
+                >
+                  {copied === 'ai' ? '✓ Copied' : '⎘ Copy'}
+                </button>
+              </div>
+            ) : null
           ) : (
             <div className="flex items-center gap-2">
               {clientEmail && (

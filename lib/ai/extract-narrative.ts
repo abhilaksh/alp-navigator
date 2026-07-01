@@ -8,10 +8,15 @@
  * best in late spring...". This is a last-resort cleanup for that case;
  * the real fix is giving the call enough max_tokens to finish naturally.
  *
- * Headers and their content often share a single newline (no blank line
- * between them), so paragraph-splitting doesn't isolate them -- this works
- * line by line instead, grouping consecutive "prose-looking" lines and
- * keeping the last complete-looking group.
+ * IMPORTANT: this must never touch genuinely clean output. An earlier
+ * version always picked "the last complete-looking group" out of the text,
+ * which corrupted normal multi-paragraph replies (e.g. a WhatsApp message
+ * ending in an emoji or "[preview link]" placeholder) by discarding the
+ * real content and keeping only a trailing fragment, because the ending
+ * didn't match a narrow "sentence looks finished" check. So this now only
+ * ever rewrites the text when it can find explicit contamination markers
+ * (numbered analysis headers, "let me draft", etc.) -- otherwise the raw
+ * text is returned completely untouched.
  */
 const META_LINE =
   /^(let'?s|let me|i need|i'll|i will|the user wants|analyz|deconstruct|draft:?$|refine:?$|refining|attempt \d|check(ing)?|review(ing)?|constraint|that'?s (about |approximately )?\d|word count|counting|good\.?$|\d+\s*words?[.)]?$)/i;
@@ -28,13 +33,22 @@ function isNoiseLine(line: string): boolean {
   return false;
 }
 
-function endsCompletely(s: string): boolean {
-  return /[.!?"']\s*$/.test(s.trim());
+function looksContaminated(text: string): boolean {
+  const lines = text.split('\n');
+  return lines.some(line => {
+    const t = line.trim();
+    if (!t) return false;
+    return HEADER_LINE.test(line) || META_LINE.test(t) || BULLET_LINE.test(line);
+  });
 }
 
 export function extractNarrative(raw: string): string {
   const text = raw.trim();
   if (!text) return '';
+
+  // No contamination markers at all -- trust the model's output as-is.
+  // This is the common case once max_tokens gives the model room to finish.
+  if (!looksContaminated(text)) return text;
 
   const lines = text.split('\n');
   const groups: string[][] = [];
@@ -53,13 +67,10 @@ export function extractNarrative(raw: string): string {
   if (groups.length === 0) return text;
 
   const joined = groups.map(g => g.join('\n').trim()).filter(Boolean);
+  if (joined.length === 0) return text;
 
-  // Prefer the last group that reads as a finished sentence -- later groups
-  // are usually more-refined drafts, but a truncated final attempt is worse
-  // than a complete earlier one.
-  for (let i = joined.length - 1; i >= 0; i--) {
-    if (endsCompletely(joined[i])) return joined[i];
-  }
-
-  return joined[joined.length - 1];
+  // Later groups are usually the more-refined draft in this model's
+  // draft-then-revise pattern -- take the longest one instead of guessing
+  // at "sentence completeness", which misfires on emoji/bracket endings.
+  return joined.reduce((best, g) => (g.length > best.length ? g : best), joined[0]);
 }
