@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/db/queries';
-import { getForaPartner } from '@/lib/fora/lookup';
 
 const WP_API = 'https://alptravel.co/wp-json/wp/v2';
+
+const TIER_STARS: Record<string, number> = {
+  iconic: 5,
+  exceptional: 4,
+  excellent: 3,
+};
 
 export async function POST(req: NextRequest) {
   const user = await getUser();
@@ -15,12 +20,13 @@ export async function POST(req: NextRequest) {
   const params = new URLSearchParams({
     search: query,
     per_page: '20',
-    _fields: 'id,title,slug,link,acf,_links',
+    _fields: 'id,title,slug,link,acf,featured_media,_links,_embedded',
+    _embed: 'wp:featuredmedia',
   });
 
   let wpRes: Response;
   try {
-    wpRes = await fetch(`${WP_API}/hotels?${params}`, {
+    wpRes = await fetch(`${WP_API}/hotel?${params}`, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(10_000),
     });
@@ -36,27 +42,29 @@ export async function POST(req: NextRequest) {
   const posts: WpHotel[] = await wpRes.json();
 
   const results = posts.map(p => {
-    const foraId = p.acf?.fora_id ?? null;
-    const fp = foraId ? getForaPartner(foraId) : null;
+    const thumbnail = p._embedded?.['wp:featuredmedia']?.[0]?.source_url ?? null;
     return {
       id: `wp-${p.id}`,
       name: p.title?.rendered ?? '',
-      stars: parseInt(p.acf?.hotel_class ?? '0', 10) || 0,
-      rating: parseFloat(p.acf?.rating ?? '0') || 0,
+      stars: TIER_STARS[p.acf?.tier ?? ''] ?? 0,
+      rating: 0,
       reviews: 0,
       googleRateInr: null,
-      thumbnail: p.acf?.thumbnail ?? null,
-      foraId,
-      isForaPreferred: Boolean(p.acf?.is_fora_preferred) || Boolean(fp),
-      isForaReserve: fp?.programs.includes('Fora Reserve') ?? false,
-      foraPrograms: fp?.programs ?? [],
-      foraPerks: fp?.perks ?? null,
-      commissionRange: fp?.commissionRange ?? null,
-      awards: fp?.awards ?? [],
-      isVirtuoso: Boolean(p.acf?.is_virtuoso),
-      lat: parseFloat(p.acf?.lat ?? '') || undefined,
-      lng: parseFloat(p.acf?.lng ?? '') || undefined,
-      hotelWebsite: p.acf?.hotel_website ?? null,
+      thumbnail,
+      foraId: null,
+      isForaPreferred: false,
+      isForaReserve: false,
+      foraPrograms: [] as string[],
+      foraPerks: null,
+      commissionRange: null,
+      awards: [] as string[],
+      isVirtuoso: false,
+      lat: undefined,
+      lng: undefined,
+      hotelWebsite: null,
+      locationLabel: p.acf?.location_label ?? null,
+      editorialTake: p.acf?.editorial_take ?? null,
+      featured: Boolean(p.acf?.featured),
       wpId: p.id,
       wpSlug: p.slug,
       source: 'wp' as const,
@@ -71,15 +79,14 @@ interface WpHotel {
   slug: string;
   title?: { rendered: string };
   link?: string;
+  featured_media?: number;
   acf?: {
-    hotel_class?: string;
-    rating?: string;
-    thumbnail?: string;
-    fora_id?: string;
-    is_fora_preferred?: boolean;
-    is_virtuoso?: boolean;
-    lat?: string;
-    lng?: string;
-    hotel_website?: string;
+    tier?: string;
+    location_label?: string;
+    editorial_take?: string;
+    featured?: boolean;
+  };
+  _embedded?: {
+    'wp:featuredmedia'?: Array<{ source_url?: string }>;
   };
 }
