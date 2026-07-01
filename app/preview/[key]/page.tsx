@@ -511,7 +511,7 @@ export default async function PreviewPage({ params }: Props) {
                             </div>
 
                             {/* Perks */}
-                            {(parsed.perks?.length || parsed.inclusions?.length) && (
+                            {Boolean(parsed.perks?.length || parsed.inclusions?.length) && (
                               <div>
                                 <p
                                   className="text-[9px] uppercase tracking-[0.1em] mb-2"
