@@ -41,12 +41,9 @@ export async function POST(req: NextRequest) {
     return {
       id: `wp-${p.id}`,
       name: p.title?.rendered ?? '',
-      // No per-hotel star/quality field exists in the alp_hotel ACF group --
-      // `tier` is left at its ACF default ("excellent") on every imported
-      // hotel and carries no real signal, so we don't fabricate a rating.
-      stars: 0,
-      rating: 0,
-      reviews: 0,
+      stars: p.acf?.hotel_class ?? 0,
+      rating: p.acf?.average_review_rating ?? 0,
+      reviews: p.acf?.total_review_count ?? 0,
       googleRateInr: null,
       thumbnail,
       foraId: null,
@@ -57,8 +54,8 @@ export async function POST(req: NextRequest) {
       commissionRange: null,
       awards: [] as string[],
       isVirtuoso: false,
-      lat: undefined,
-      lng: undefined,
+      lat: p.acf?.lat ?? undefined,
+      lng: p.acf?.lon ?? undefined,
       hotelWebsite: null,
       locationLabel: p.acf?.location_label ?? null,
       editorialTake: p.acf?.editorial_take ?? null,
@@ -83,6 +80,12 @@ interface WpHotel {
     location_label?: string;
     editorial_take?: string;
     featured?: boolean;
+    hotel_class?: number;
+    average_review_rating?: number;
+    total_review_count?: number;
+    all_time_booking_count?: number;
+    lat?: number;
+    lon?: number;
   };
   _embedded?: {
     'wp:featuredmedia'?: Array<{ source_url?: string }>;
