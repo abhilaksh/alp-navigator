@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, MapPin, Sparkles, Loader2 } from 'lucide-react';
 import { Topbar, type SaveStatus, type WorkflowStatus, type IntakeStatus } from '@/components/editor/topbar';
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
@@ -157,6 +158,7 @@ interface EditorProps { trip: TripFull; }
 
 export function Editor({ trip: initialTrip }: EditorProps) {
   const id = initialTrip.id;
+  const router = useRouter();
 
   const [label, setLabel]           = useState(initialTrip.label);
   const [notes, setNotes]           = useState(initialTrip.notes ?? '');
@@ -165,6 +167,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [generatingOverview, setGeneratingOverview] = useState(false);
   const [adults]                    = useState(initialTrip.adults);
   const [status, setStatus]         = useState<WorkflowStatus>(initialTrip.status as WorkflowStatus);
+  const [isBlueprint, setIsBlueprint] = useState(Boolean((initialTrip as { isBlueprint?: number | boolean }).isBlueprint));
+  const [togglingBlueprint, setTogglingBlueprint] = useState(false);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
   const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes' | 'research' | 'engagement'>('editor');
@@ -258,6 +262,34 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       });
       setSaveStatus(res.ok ? 'saved' : 'error');
     } catch { setSaveStatus('error'); }
+  }
+
+  async function handleToggleBlueprint() {
+    const next = !isBlueprint;
+    if (next && !confirm('Save this trip as a reusable blueprint? Its client and fixed dates will be cleared — destinations keep their relative day offsets instead.')) {
+      return;
+    }
+    setTogglingBlueprint(true);
+    setSaveStatus('saving');
+    try {
+      const res = await fetch(`/api/trips/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isBlueprint: next }),
+      });
+      setSaveStatus(res.ok ? 'saved' : 'error');
+      if (res.ok) {
+        setIsBlueprint(next);
+        // Server-side conversion rewrites destination dates/offsets — refetch rather than
+        // reconcile that client-side.
+        router.refresh();
+        if (next) router.push('/trips');
+      }
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      setTogglingBlueprint(false);
+    }
   }
 
   function handleNotesChange(v: string) {
@@ -931,6 +963,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         intakeStatus={intakeStatus}
         onIntakeStatusChange={handleIntakeStatusChange}
         createdAt={initialTrip.createdAt}
+        isBlueprint={isBlueprint}
+        onToggleBlueprint={togglingBlueprint ? undefined : handleToggleBlueprint}
         followUpWarning={(() => {
           if (status !== 'sent') return null;
           const fv = (initialTrip as { firstViewedAt?: number | null }).firstViewedAt;

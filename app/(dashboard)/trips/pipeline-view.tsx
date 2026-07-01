@@ -3,7 +3,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { List, LayoutGrid, AlertTriangle, Clock, Copy, Archive } from 'lucide-react';
+import { List, LayoutGrid, AlertTriangle, Clock, Copy, Archive, MapPin, Sparkles, X } from 'lucide-react';
+import { ClientPicker, type ClientSelection } from '@/components/shared/client-picker';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -20,6 +21,26 @@ export interface PipelineTrip {
   destinationCount: number | null;
   minHoldExpiry: string | null;
   firstViewedAt: number | null;
+}
+
+export interface BlueprintTrip {
+  id: number;
+  label: string;
+  updatedAt: Date;
+  createdAt: Date;
+  destinationCount: number | null;
+  blueprintCountry: string | null;
+  blueprintTags: string | null;
+}
+
+function parseTags(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 const STATUSES = ['draft', 'sent', 'accepted', 'booked'] as const;
@@ -397,6 +418,255 @@ function AlertRail({ trips }: { trips: PipelineTrip[] }) {
   );
 }
 
+/* ─── Instantiate modal ───────────────────────────────────────────────────────── */
+
+function InstantiateModal({ blueprint, onClose }: { blueprint: BlueprintTrip; onClose: () => void }) {
+  const router = useRouter();
+  const [startDate, setStartDate] = useState('');
+  const [clientSelection, setClientSelection] = useState<ClientSelection>({});
+  const [label, setLabel] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!startDate) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/trips/${blueprint.id}/instantiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDate,
+          clientId: clientSelection.clientId,
+          clientName: clientSelection.clientName,
+          label: label.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? 'Failed to create trip from blueprint');
+      }
+      const { tripId } = await res.json();
+      router.push(`/trips/${tripId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(22,26,23,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-[6px] shadow-xl"
+        onClick={e => e.stopPropagation()}
+        style={{ border: '1px solid rgba(22,26,23,0.1)' }}
+      >
+        <div className="flex items-start justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid rgba(22,26,23,0.08)' }}>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Sparkles size={13} style={{ color: '#A98B52' }} />
+              <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-brass">Use blueprint</span>
+            </div>
+            <h2 className="font-display text-[19px] text-ink leading-tight">{blueprint.label}</h2>
+          </div>
+          <button onClick={onClose} className="text-ink-mute hover:text-ink transition-colors" aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          <div>
+            <label htmlFor="bpStartDate" className="block text-sm font-medium text-ink-soft mb-1.5">
+              Start date
+            </label>
+            <input
+              id="bpStartDate"
+              type="date"
+              required
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="w-full px-3.5 py-2.5 bg-white border border-glacier rounded-md text-sm text-ink focus:outline-none focus:ring-1 focus:ring-brass focus:border-brass transition-colors"
+            />
+            <p className="text-[11px] text-ink-mute mt-1">Destination dates are computed from this date and the blueprint's day offsets.</p>
+          </div>
+
+          <ClientPicker onChange={setClientSelection} />
+
+          <div>
+            <label htmlFor="bpLabel" className="block text-sm font-medium text-ink-soft mb-1.5">
+              Trip label <span className="text-ink-mute font-normal">(optional)</span>
+            </label>
+            <input
+              id="bpLabel"
+              type="text"
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder={`${blueprint.label} — ${startDate || 'date'}`}
+              className="w-full px-3.5 py-2.5 bg-white border border-glacier rounded-md text-sm text-ink placeholder:text-ink-mute/60 focus:outline-none focus:ring-1 focus:ring-brass focus:border-brass transition-colors"
+            />
+          </div>
+
+          {error && <p className="text-sm text-danger">{error}</p>}
+
+          <div className="pt-1 flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={loading || !startDate}
+              className="bg-spruce text-white text-sm font-medium px-5 py-2.5 rounded-md hover:bg-spruce-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Creating…' : 'Create trip'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-sm text-ink-mute hover:text-ink px-3 py-2.5 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Blueprint card + list ──────────────────────────────────────────────────── */
+
+function BlueprintCard({ blueprint, onUse }: { blueprint: BlueprintTrip; onUse: () => void }) {
+  const tags = parseTags(blueprint.blueprintTags);
+  return (
+    <div
+      className="group relative rounded-[5px] bg-white transition-all px-4 py-3.5"
+      style={{ border: '1px solid rgba(169,139,82,0.22)', boxShadow: '0 1px 3px rgba(22,26,23,0.04)' }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Sparkles size={11} style={{ color: '#A98B52' }} />
+            <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-brass">
+              {blueprint.blueprintCountry ?? 'Blueprint'}
+            </span>
+          </div>
+          <span className="font-display text-[15px] text-ink leading-snug block truncate">{blueprint.label}</span>
+          <div className="flex items-center gap-2 flex-wrap mt-1">
+            {(blueprint.destinationCount ?? 0) > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-ink-mute font-sans">
+                <MapPin size={10} />
+                {blueprint.destinationCount} destination{blueprint.destinationCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {tags.map(t => (
+              <span
+                key={t}
+                className="text-[10px] font-sans font-medium px-[6px] py-[1px] rounded-full"
+                style={{ background: 'rgba(30,58,47,0.06)', color: '#4A514B', border: '1px solid rgba(22,26,23,0.1)' }}
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+        <button
+          onClick={onUse}
+          className="flex-shrink-0 bg-spruce text-white text-[12px] font-medium px-3.5 py-[7px] rounded-[4px] hover:opacity-90 transition-opacity font-sans"
+        >
+          Use this blueprint
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BlueprintList({ blueprints, onUse }: { blueprints: BlueprintTrip[]; onUse: (b: BlueprintTrip) => void }) {
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const b of blueprints) parseTags(b.blueprintTags).forEach(t => set.add(t));
+    return Array.from(set).sort();
+  }, [blueprints]);
+
+  const filtered = useMemo(() => {
+    if (!activeTag) return blueprints;
+    return blueprints.filter(b => parseTags(b.blueprintTags).includes(activeTag));
+  }, [blueprints, activeTag]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, BlueprintTrip[]>();
+    for (const b of filtered) {
+      const key = b.blueprintCountry ?? 'Other';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(b);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
+
+  if (blueprints.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <p className="font-display text-xl text-ink mb-2">No blueprints yet</p>
+        <p className="text-sm text-ink-mute">
+          Mark any trip as a blueprint from its editor to reuse it for future clients.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {allTags.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-4">
+          <button
+            onClick={() => setActiveTag(null)}
+            className="text-[11px] font-sans font-medium px-2.5 py-1 rounded-full transition-colors"
+            style={{
+              background: activeTag === null ? '#1E3A2F' : 'transparent',
+              color: activeTag === null ? '#F6F4EE' : '#4A514B',
+              border: `1px solid ${activeTag === null ? '#1E3A2F' : 'rgba(22,26,23,0.15)'}`,
+            }}
+          >
+            All
+          </button>
+          {allTags.map(t => (
+            <button
+              key={t}
+              onClick={() => setActiveTag(prev => (prev === t ? null : t))}
+              className="text-[11px] font-sans font-medium px-2.5 py-1 rounded-full transition-colors"
+              style={{
+                background: activeTag === t ? '#A98B52' : 'transparent',
+                color: activeTag === t ? 'white' : '#4A514B',
+                border: `1px solid ${activeTag === t ? '#A98B52' : 'rgba(22,26,23,0.15)'}`,
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-6">
+        {grouped.map(([country, list]) => (
+          <div key={country}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-display text-[15px] text-ink">{country}</span>
+              <span className="font-mono text-[10px] text-ink-mute">{list.length}</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {list.map(b => <BlueprintCard key={b.id} blueprint={b} onUse={() => onUse(b)} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Pipeline View (main export) ────────────────────────────────────────────── */
 
 const STATUS_TABS = [
@@ -409,14 +679,17 @@ const STATUS_TABS = [
 
 interface PipelineViewProps {
   trips: PipelineTrip[];
+  blueprints?: BlueprintTrip[];
   commissionSummary?: { expected: number; received: number; pending: number; count: number };
   showingArchived?: boolean;
 }
 
-export function PipelineView({ trips, commissionSummary, showingArchived = false }: PipelineViewProps) {
+export function PipelineView({ trips, blueprints = [], commissionSummary, showingArchived = false }: PipelineViewProps) {
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [activeStatus, setActiveStatus] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [instantiateTarget, setInstantiateTarget] = useState<BlueprintTrip | null>(null);
+  const onBlueprints = activeStatus === 'blueprints';
 
   const filteredTrips = useMemo(() => {
     if (!search.trim()) return trips;
@@ -497,6 +770,7 @@ export function PipelineView({ trips, commissionSummary, showingArchived = false
       </div>
 
       {/* Stats strip */}
+      {!onBlueprints && (
       <div className="grid grid-cols-4 gap-2.5 mb-5">
         {STATUSES.map(s => {
           const meta = STATUS_META[s];
@@ -519,12 +793,13 @@ export function PipelineView({ trips, commissionSummary, showingArchived = false
           );
         })}
       </div>
+      )}
 
       {/* Alert rail */}
-      <AlertRail trips={filteredTrips} />
+      {!onBlueprints && <AlertRail trips={filteredTrips} />}
 
       {/* Commission summary — only shown when data exists */}
-      {commissionSummary && commissionSummary.count > 0 && (
+      {!onBlueprints && commissionSummary && commissionSummary.count > 0 && (
         <div
           className="flex items-center gap-6 px-4 py-3 rounded-[5px] mb-4"
           style={{ background: 'rgba(22,26,23,0.04)', border: '1px solid rgba(22,26,23,0.07)' }}
@@ -548,12 +823,12 @@ export function PipelineView({ trips, commissionSummary, showingArchived = false
       )}
 
       {/* Status tabs (list view only) */}
-      {view === 'list' && (
+      {(view === 'list' || onBlueprints) && (
         <div className="flex items-center gap-0.5 mb-4" style={{ borderBottom: '1px solid #C9D2CC' }}>
           {STATUS_TABS.map(({ key, label }) => (
             <button
               key={key}
-              onClick={() => setActiveStatus(key)}
+              onClick={() => { setActiveStatus(key); setView('list'); }}
               className="px-4 py-2 text-[12px] font-medium font-sans border-b-2 -mb-px transition-colors cursor-pointer"
               style={{
                 borderBottomColor: activeStatus === key ? '#1E3A2F' : 'transparent',
@@ -568,14 +843,34 @@ export function PipelineView({ trips, commissionSummary, showingArchived = false
               )}
             </button>
           ))}
+          <button
+            onClick={() => setActiveStatus('blueprints')}
+            className="px-4 py-2 text-[12px] font-medium font-sans border-b-2 -mb-px transition-colors cursor-pointer flex items-center gap-1.5"
+            style={{
+              borderBottomColor: onBlueprints ? '#A98B52' : 'transparent',
+              color: onBlueprints ? '#A98B52' : '#4A514B',
+            }}
+          >
+            <Sparkles size={11} />
+            Blueprints
+            <span className="ml-0.5 text-[10px] font-mono" style={{ color: onBlueprints ? '#A98B52' : '#9AA59B' }}>
+              {blueprints.length}
+            </span>
+          </button>
         </div>
       )}
 
       {/* Content */}
-      {view === 'list' ? (
+      {onBlueprints ? (
+        <BlueprintList blueprints={blueprints} onUse={setInstantiateTarget} />
+      ) : view === 'list' ? (
         <ListView trips={filteredTrips} activeStatus={activeStatus} />
       ) : (
         <KanbanBoard trips={filteredTrips} />
+      )}
+
+      {instantiateTarget && (
+        <InstantiateModal blueprint={instantiateTarget} onClose={() => setInstantiateTarget(null)} />
       )}
     </div>
   );

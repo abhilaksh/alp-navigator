@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, MessageCircle, Eye, Loader2, DollarSign, X } from 'lucide-react';
+import { ChevronDown, MessageCircle, Eye, Loader2, DollarSign, X, Sparkles } from 'lucide-react';
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';
 export type WorkflowStatus = 'draft' | 'sent' | 'accepted' | 'booked';
@@ -46,6 +46,8 @@ interface TopbarProps {
   onIntakeStatusChange?: (s: IntakeStatus) => void;
   createdAt?: Date | null;
   followUpWarning?: 'amber' | 'red' | null;
+  isBlueprint?: boolean;
+  onToggleBlueprint?: () => void;
 }
 
 export function Topbar({
@@ -60,6 +62,8 @@ export function Topbar({
   firstViewedAt, viewCount,
   intakeStatus, onIntakeStatusChange, createdAt,
   followUpWarning,
+  isBlueprint = false,
+  onToggleBlueprint,
 }: TopbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showIntakeDropdown, setShowIntakeDropdown] = useState(false);
@@ -300,7 +304,38 @@ export function Topbar({
           </div>
         )}
 
+        {/* Blueprint toggle */}
+        {onToggleBlueprint && (
+          <button
+            onClick={onToggleBlueprint}
+            title={isBlueprint ? 'Convert back to a regular trip' : 'Save as a reusable blueprint'}
+            className="inline-flex items-center gap-[5px] px-[9px] py-[3px] rounded-full text-[10px] font-medium tracking-[0.05em] cursor-pointer transition-colors"
+            style={{
+              border: `1px solid ${isBlueprint ? 'rgba(169,139,82,0.55)' : 'rgba(255,255,255,0.18)'}`,
+              background: isBlueprint ? 'rgba(169,139,82,0.18)' : 'rgba(255,255,255,0.10)',
+              color: isBlueprint ? '#C9A26A' : 'rgba(255,255,255,0.75)',
+            }}
+          >
+            <Sparkles size={10} />
+            {isBlueprint ? 'Blueprint' : 'Save as blueprint'}
+          </button>
+        )}
+
         {/* Workflow pill */}
+        {isBlueprint ? (
+          <div
+            className="inline-flex items-center gap-[5px] px-[10px] py-1 rounded-full text-[11px] font-medium tracking-[0.06em] uppercase"
+            style={{
+              border: '1px solid rgba(169,139,82,0.4)',
+              background: 'rgba(169,139,82,0.14)',
+              color: '#C9A26A',
+            }}
+            title="Blueprints have no workflow status — instantiate to a real trip to move it through the pipeline"
+          >
+            <Sparkles size={9} />
+            Template
+          </div>
+        ) : (
         <div className="relative" ref={pillRef}>
           <button
             onClick={() => setShowDropdown(v => !v)}
@@ -338,6 +373,7 @@ export function Topbar({
             </div>
           )}
         </div>
+        )}
 
         {/* WA */}
         <button

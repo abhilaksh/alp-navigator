@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, asc } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { trips, teamMembers, tripSnapshots } from '@/lib/db/schema';
+import { trips, teamMembers, tripSnapshots, destinations } from '@/lib/db/schema';
 import { getUser, getTripById } from '@/lib/db/queries';
 
 type Params = { params: Promise<{ id: string }> };
+
+function daysBetween(a: string, b: string) {
+  return Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
+}
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const user = await getUser();
@@ -37,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await req.json();
-  const { label, adults, status, clientId, notes, totalFromInr, fxDate, fxSource, fxBufferPct, fxUsdToInr, paymentData, intakeStatus, personalNote, journeyOverview, heroImage, budgetStatedInr, budgetEstimatedInr, urgencyFlag, clarificationFlags } = body;
+  const { label, adults, status, clientId, notes, totalFromInr, fxDate, fxSource, fxBufferPct, fxUsdToInr, paymentData, intakeStatus, personalNote, journeyOverview, heroImage, budgetStatedInr, budgetEstimatedInr, urgencyFlag, clarificationFlags, isBlueprint, blueprintCountry, blueprintTags } = body;
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (label !== undefined) updates.label = label;
@@ -64,8 +68,41 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (budgetEstimatedInr !== undefined) updates.budgetEstimatedInr = budgetEstimatedInr;
   if (urgencyFlag !== undefined) updates.urgencyFlag = urgencyFlag;
   if (clarificationFlags !== undefined) updates.clarificationFlags = clarificationFlags;
+  if (blueprintCountry !== undefined) updates.blueprintCountry = blueprintCountry;
+  if (blueprintTags !== undefined) updates.blueprintTags = Array.isArray(blueprintTags) ? JSON.stringify(blueprintTags) : blueprintTags;
+
+  let becameBlueprint = false;
+  if (isBlueprint !== undefined) {
+    const [current] = await db.select({ isBlueprint: trips.isBlueprint }).from(trips).where(eq(trips.id, tripId)).limit(1);
+    updates.isBlueprint = isBlueprint ? 1 : 0;
+    if (isBlueprint && current && !current.isBlueprint) {
+      becameBlueprint = true;
+      updates.clientId = null; // a blueprint has no client
+    }
+  }
 
   await db.update(trips).set(updates).where(eq(trips.id, tripId));
+
+  // Converting to a blueprint: replace each destination's absolute dates with a
+  // relative day_offset (kept dates are meaningless once detached from a client)
+  if (becameBlueprint) {
+    const dests = await db
+      .select({ id: destinations.id, checkin: destinations.checkin })
+      .from(destinations)
+      .where(eq(destinations.tripId, tripId))
+      .orderBy(asc(destinations.sortOrder));
+
+    const dated = dests.filter((d): d is { id: number; checkin: string } => !!d.checkin);
+    if (dated.length > 0) {
+      const tripStart = dated.reduce((min, d) => (d.checkin < min ? d.checkin : min), dated[0].checkin);
+      for (const d of dated) {
+        await db
+          .update(destinations)
+          .set({ dayOffset: daysBetween(tripStart, d.checkin), checkin: null, checkout: null })
+          .where(eq(destinations.id, d.id));
+      }
+    }
+  }
 
   // Auto-snapshot when status first transitions to 'sent' or 'accepted'
   if (status === 'sent' || status === 'accepted') {

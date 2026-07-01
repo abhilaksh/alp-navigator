@@ -7,6 +7,7 @@ import {
   real,
   timestamp,
   date,
+  type AnyMySqlColumn,
 } from 'drizzle-orm/mysql-core';
 import { relations } from 'drizzle-orm';
 
@@ -118,6 +119,11 @@ export const trips = mysqlTable('trips', {
   clarificationFlags: text('clarification_flags'),     // JSON: ClarificationFlag[]
   clientAcceptedAt: bigint('client_accepted_at', { mode: 'number' }),  // epoch ms when client accepted
   clientAcceptanceNote: text('client_acceptance_note'),                 // optional note from client on acceptance
+  isBlueprint: int('is_blueprint').notNull().default(0),  // 1 = reusable template, not a live client quote
+  sourceBlueprintId: int('source_blueprint_id').references((): AnyMySqlColumn => trips.id, { onDelete: 'set null' }),
+  // set on a trip created from a blueprint, for provenance
+  blueprintCountry: varchar('blueprint_country', { length: 100 }),   // blueprint-only: primary country, for grouping
+  blueprintTags: text('blueprint_tags'),                             // blueprint-only: JSON string[] e.g. ["Honeymoon","Islands"]
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -132,6 +138,7 @@ export const destinations = mysqlTable('destinations', {
   checkin: varchar('checkin', { length: 10 }),
   checkout: varchar('checkout', { length: 10 }),
   nights: int('nights'),
+  dayOffset: int('day_offset'),  // blueprint-only: days into the trip this destination starts (0-indexed)
   narrative: text('narrative'),
   heroImage: text('hero_image'),   // URL of the destination's cover photo
   sortOrder: int('sort_order').notNull().default(0),

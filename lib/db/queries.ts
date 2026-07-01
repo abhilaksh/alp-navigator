@@ -159,7 +159,40 @@ export async function getTripsWithDetailsForUser(includeArchived = false) {
     .leftJoin(destCountSq, eq(trips.id, destCountSq.tripId))
     .where(and(
       eq(trips.userId, user.id),
+      eq(trips.isBlueprint, 0),
       includeArchived ? undefined : ne(trips.status, 'archived'),
+    ))
+    .orderBy(desc(trips.updatedAt));
+}
+
+export async function getBlueprintsForUser() {
+  const user = await getUser();
+  if (!user) return [];
+
+  const destCountSq = db
+    .select({
+      tripId: destinations.tripId,
+      cnt: count(destinations.id).as('cnt'),
+    })
+    .from(destinations)
+    .groupBy(destinations.tripId)
+    .as('dest_cnt');
+
+  return db
+    .select({
+      id: trips.id,
+      label: trips.label,
+      updatedAt: trips.updatedAt,
+      createdAt: trips.createdAt,
+      destinationCount: destCountSq.cnt,
+      blueprintCountry: trips.blueprintCountry,
+      blueprintTags: trips.blueprintTags,
+    })
+    .from(trips)
+    .leftJoin(destCountSq, eq(trips.id, destCountSq.tripId))
+    .where(and(
+      eq(trips.userId, user.id),
+      eq(trips.isBlueprint, 1),
     ))
     .orderBy(desc(trips.updatedAt));
 }
