@@ -3,12 +3,6 @@ import { getUser } from '@/lib/db/queries';
 
 const WP_API = 'https://alptravel.co/wp-json/wp/v2';
 
-const TIER_STARS: Record<string, number> = {
-  iconic: 5,
-  exceptional: 4,
-  excellent: 3,
-};
-
 export async function POST(req: NextRequest) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -29,6 +23,7 @@ export async function POST(req: NextRequest) {
     wpRes = await fetch(`${WP_API}/hotel?${params}`, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(10_000),
+      cache: 'no-store',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -46,7 +41,10 @@ export async function POST(req: NextRequest) {
     return {
       id: `wp-${p.id}`,
       name: p.title?.rendered ?? '',
-      stars: TIER_STARS[p.acf?.tier ?? ''] ?? 0,
+      // No per-hotel star/quality field exists in the alp_hotel ACF group --
+      // `tier` is left at its ACF default ("excellent") on every imported
+      // hotel and carries no real signal, so we don't fabricate a rating.
+      stars: 0,
       rating: 0,
       reviews: 0,
       googleRateInr: null,

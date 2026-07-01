@@ -19,6 +19,8 @@ export interface SearchResult {
   isVirtuoso?: boolean;
   lat?: number;
   lng?: number;
+  locationLabel?: string | null;
+  featured?: boolean;
 }
 
 interface SearchPanelProps {
@@ -380,6 +382,11 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
         {hotel.stars > 0 && (
           <div className="text-[9px] text-brass tracking-[-0.5px] mb-0.5">{stars}</div>
         )}
+        {hotel.locationLabel && (
+          <div className="text-[10px] text-ink-mute mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
+            {hotel.locationLabel}
+          </div>
+        )}
         <div className="flex items-center gap-[5px]">
           {hotel.rating > 0 && (
             <span className="font-mono text-[10px] text-ink-soft px-[5px] py-px rounded-[2px] bg-paper-deep">
@@ -411,6 +418,11 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
           {hotel.isVirtuoso && (
             <span className="text-[9px] font-sans px-[5px] py-px rounded-sm" style={{ background: 'rgba(169,139,82,0.1)', color: '#A98B52' }}>
               Virtuoso
+            </span>
+          )}
+          {hotel.featured && (
+            <span className="text-[9px] font-sans px-[5px] py-px rounded-sm" style={{ background: 'rgba(169,139,82,0.1)', color: '#A98B52' }}>
+              Featured
             </span>
           )}
         </div>
