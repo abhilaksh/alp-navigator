@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Plus, Check, Loader2, AlertCircle } from 'lucide-react';
 
 export interface SearchResult {
@@ -27,6 +27,8 @@ interface SearchPanelProps {
   destinationName: string;
   tripId: number;
   destinationId: number | null;
+  destCheckin?: string | null;
+  destCheckout?: string | null;
   addedHotelIds: Set<string>;
   onAdd: (hotel: SearchResult) => Promise<void>;
   onAddManual: () => Promise<void>;
@@ -51,17 +53,25 @@ function localDate(offsetDays = 0) {
   return d.toLocaleDateString('en-CA');
 }
 
-export function SearchPanel({ destinationName, tripId, destinationId, addedHotelIds, onAdd, onAddManual }: SearchPanelProps) {
+export function SearchPanel({ destinationName, tripId, destinationId, destCheckin, destCheckout, addedHotelIds, onAdd, onAddManual }: SearchPanelProps) {
   const [searchMode, setSearchMode] = useState<'google' | 'wp'>('google');
   const [query, setQuery] = useState(`${destinationName} luxury hotels`);
-  const [checkin, setCheckin] = useState(() => localDate(1));
-  const [checkout, setCheckout] = useState(() => localDate(4));
+  const [checkin, setCheckin] = useState(() => destCheckin || localDate(1));
+  const [checkout, setCheckout] = useState(() => destCheckout || localDate(4));
   const [starFilters, setStarFilters] = useState<Set<number>>(new Set([5, 4]));
   const [sort, setSort] = useState('relevance');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<Set<string>>(new Set());
+
+  // Keep the Google Hotels date finder in step with the destination's own
+  // check-in/check-out -- switching destinations, or editing dates in the
+  // destination header, should carry into the search dates automatically.
+  useEffect(() => {
+    if (destCheckin) setCheckin(destCheckin);
+    if (destCheckout) setCheckout(destCheckout);
+  }, [destinationId, destCheckin, destCheckout]);
 
   function handleCheckinChange(val: string) {
     setCheckin(val);

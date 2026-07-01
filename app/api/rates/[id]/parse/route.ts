@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
-import { rates } from '@/lib/db/schema';
+import { rates, hotelDetails, tripItems, destinations, type ParsedRate } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
 
 type Params = { params: Promise<{ id: string }> };
@@ -21,6 +21,23 @@ If the text contains multiple room options, return a JSON object with a "rates" 
 Otherwise return a single JSON object with those fields directly.
 Output only valid JSON with no markdown or code fences.`;
 
+function fmtDate(d: string): string {
+  try {
+    return new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  } catch { return d; }
+}
+
+function checkDateMismatch(rate: ParsedRate, destCheckin: string | null, destCheckout: string | null): ParsedRate {
+  if (!destCheckin || !destCheckout || !rate.checkin || !rate.checkout) return rate;
+  const outOfRange = rate.checkin < destCheckin || rate.checkout > destCheckout;
+  if (!outOfRange) return rate;
+  return {
+    ...rate,
+    date_mismatch: true,
+    date_mismatch_note: `Rate dates (${fmtDate(rate.checkin)} → ${fmtDate(rate.checkout)}) fall outside the destination's dates (${fmtDate(destCheckin)} → ${fmtDate(destCheckout)}).`,
+  };
+}
+
 export async function POST(req: NextRequest, { params }: Params) {
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -30,11 +47,20 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (isNaN(rateId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
   const [existing] = await db
-    .select({ id: rates.id })
+    .select({ id: rates.id, hotelDetailId: rates.hotelDetailId })
     .from(rates)
     .where(eq(rates.id, rateId))
     .limit(1);
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Destination dates for this hotel, to sanity-check the parsed rate against.
+  const [destInfo] = await db
+    .select({ checkin: destinations.checkin, checkout: destinations.checkout })
+    .from(hotelDetails)
+    .innerJoin(tripItems, eq(tripItems.id, hotelDetails.itemId))
+    .innerJoin(destinations, eq(destinations.id, tripItems.destinationId))
+    .where(eq(hotelDetails.id, existing.hotelDetailId))
+    .limit(1);
 
   const body = await req.json();
   const { rawText } = body;
@@ -83,14 +109,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!content) throw new Error('Empty response from parse API');
 
     const parsed = JSON.parse(content);
+    const destCheckin = destInfo?.checkin ?? null;
+    const destCheckout = destInfo?.checkout ?? null;
 
     if (Array.isArray(parsed.rates) && parsed.rates.length > 0) {
       // Multiple options → proposals
+      const checkedRates = (parsed.rates as ParsedRate[]).map(r => checkDateMismatch(r, destCheckin, destCheckout));
       await db
         .update(rates)
         .set({
           status: 'proposals',
-          proposals: JSON.stringify(parsed.rates),
+          proposals: JSON.stringify(checkedRates),
           rawText,
           errorMessage: null,
           updatedAt: new Date(),
@@ -98,11 +127,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         .where(eq(rates.id, rateId));
     } else {
       // Single option → done
+      const checked = checkDateMismatch(parsed as ParsedRate, destCheckin, destCheckout);
       await db
         .update(rates)
         .set({
           status: 'done',
-          parsedData: JSON.stringify(parsed),
+          parsedData: JSON.stringify(checked),
           rawText,
           errorMessage: null,
           updatedAt: new Date(),

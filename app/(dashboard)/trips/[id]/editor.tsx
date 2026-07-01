@@ -1277,24 +1277,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   />
                   <span className="text-ink-mute text-[11px] opacity-40">·</span>
                   <input
-                    type="text"
+                    type="date"
                     value={activeDest.checkin ?? ''}
                     onChange={e => handleDestCheckinChange(activeDest.id, e.target.value)}
                     onBlur={e => { handleDestDateBlur(activeDest.id); e.currentTarget.style.borderBottomColor = 'transparent'; }}
-                    placeholder="Check-in"
                     className="font-mono text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors"
-                    style={{ borderBottom: '1px solid transparent', width: 72 }}
+                    style={{ borderBottom: '1px solid transparent', width: 118 }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
                   />
                   <span className="text-ink-mute text-[11px]">→</span>
                   <input
-                    type="text"
+                    type="date"
                     value={activeDest.checkout ?? ''}
                     onChange={e => handleDestCheckoutChange(activeDest.id, e.target.value)}
                     onBlur={e => { handleDestDateBlur(activeDest.id); e.currentTarget.style.borderBottomColor = 'transparent'; }}
-                    placeholder="Check-out"
                     className="font-mono text-[11px] text-ink-soft bg-transparent border-none border-b border-b-transparent outline-none py-0.5 transition-colors"
-                    style={{ borderBottom: '1px solid transparent', width: 72 }}
+                    style={{ borderBottom: '1px solid transparent', width: 118 }}
                     onFocus={e => (e.currentTarget.style.borderBottomColor = '#A98B52')}
                   />
                   {nightsCalc != null && (
@@ -1567,6 +1565,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
             destinationName={activeDest?.name ?? ''}
             tripId={id}
             destinationId={activeDestId}
+            destCheckin={activeDest?.checkin ?? null}
+            destCheckout={activeDest?.checkout ?? null}
             addedHotelIds={addedHotelIds}
             onAdd={handleAddHotelFromSearch}
             onAddManual={handleAddManualHotel}

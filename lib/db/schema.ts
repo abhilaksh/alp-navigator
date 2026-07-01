@@ -477,4 +477,6 @@ export type ParsedRate = {
   perks?: string[];
   key_amenities?: string[];
   vet_notes?: string;
+  date_mismatch?: boolean;
+  date_mismatch_note?: string;
 };

@@ -328,6 +328,16 @@ function DoneState({ parsed }: { parsed: ParsedRate }) {
         </div>
       )}
 
+      {parsed.date_mismatch && (
+        <div
+          className="flex items-start gap-1.5 text-[11px] px-2.5 py-2 rounded-sm mb-2.5"
+          style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', color: '#b91c1c' }}
+        >
+          <AlertCircle size={13} className="flex-shrink-0 mt-[1px]" />
+          <span>{parsed.date_mismatch_note ?? 'This rate’s dates don’t match the destination’s dates.'}</span>
+        </div>
+      )}
+
       {/* Receipt */}
       <div className="pt-2" style={{ borderTop: '1px solid rgba(22,26,23,0.10)' }}>
         {parsed.nightly_rates && parsed.nightly_rates.length > 0 && (
@@ -417,6 +427,15 @@ function ProposalsState({ proposals, onSelect }: { proposals: ParsedRate[]; onSe
           <div className="text-xs text-ink-mute font-sans mb-2">
             {p.checkin} → {p.checkout} · {p.nights} nights
           </div>
+          {p.date_mismatch && (
+            <div
+              className="flex items-start gap-1.5 text-[11px] px-2.5 py-2 rounded-sm mb-2"
+              style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', color: '#b91c1c' }}
+            >
+              <AlertCircle size={12} className="flex-shrink-0 mt-[1px]" />
+              <span>{p.date_mismatch_note ?? 'Dates don’t match the destination’s dates.'}</span>
+            </div>
+          )}
           <div className="font-mono text-[15px] text-spruce mb-2.5">
             {inr(p.total_inr)}
             {p.native_currency_code && p.native_currency_total != null && (
