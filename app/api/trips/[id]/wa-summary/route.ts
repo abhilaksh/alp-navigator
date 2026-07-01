@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { trips } from '@/lib/db/schema';
 import { getUser } from '@/lib/db/queries';
+import { extractNarrative } from '@/lib/ai/extract-narrative';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -63,14 +64,15 @@ Write 5-8 lines. Mention the preview link at the end. Be warm but concise. No ex
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: 300,
+        max_tokens: 1800,
         temperature: 0.75,
       }),
     });
 
     if (!resp.ok) return NextResponse.json({ error: 'AI request failed' }, { status: 502 });
     const data = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const text = data.choices?.[0]?.message?.content?.trim() ?? '';
+    const raw = data.choices?.[0]?.message?.content?.trim() ?? '';
+    const text = extractNarrative(raw);
     return NextResponse.json({ text });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

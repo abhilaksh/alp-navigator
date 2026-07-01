@@ -3,6 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { itineraryDays, trips } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
+import { extractNarrative } from '@/lib/ai/extract-narrative';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.6,
-        max_tokens: 600,
+        max_tokens: 2200,
       }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -80,7 +81,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     const data = await resp.json();
-    const summary = data?.choices?.[0]?.message?.content?.trim();
+    const raw = data?.choices?.[0]?.message?.content?.trim();
+    const summary = raw ? extractNarrative(raw) : '';
     if (!summary) return NextResponse.json({ error: 'Empty response from AI' }, { status: 502 });
 
     return NextResponse.json({ summary });

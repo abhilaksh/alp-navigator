@@ -3,6 +3,7 @@ import { db } from '@/lib/db/drizzle';
 import { destinations } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
+import { extractNarrative } from '@/lib/ai/extract-narrative';
 
 export async function POST(
   req: NextRequest,
@@ -55,7 +56,7 @@ Keep it under 60 words. No heading, no bullet points. Plain prose only.`.trim();
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: 150,
+        max_tokens: 1800,
         temperature: 0.7,
       }),
     });
@@ -66,7 +67,8 @@ Keep it under 60 words. No heading, no bullet points. Plain prose only.`.trim();
     }
 
     const aiData = await aiRes.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const narrative = aiData.choices?.[0]?.message?.content?.trim() ?? '';
+    const raw = aiData.choices?.[0]?.message?.content?.trim() ?? '';
+    const narrative = extractNarrative(raw);
 
     if (!narrative) {
       return NextResponse.json({ error: 'Empty response from AI' }, { status: 502 });
