@@ -200,7 +200,7 @@ export function ClientContextPanel({
           {/* Link to full client profile */}
           <div className="pt-1">
             <a
-              href={`/dashboard/clients/${clientId}`}
+              href={`/clients/${clientId}`}
               className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-mute hover:text-brass transition-colors"
               style={{ textDecoration: 'none' }}
             >
