@@ -315,7 +315,7 @@ export const itineraryBlocks = mysqlTable('itinerary_blocks', {
   // 'text' | 'tip' | 'meal' | 'transport_note' | 'hotel_ref' | 'flight_ref' |
   // 'transfer_ref' | 'activity_ref' | 'map_pin' | 'image' | 'video' | 'pdf'
   content: text('content'),                 // rich text, or JSON for image/video/pdf
-  itemId: int('item_id').references(() => tripItems.id), // optional link to a trip_item
+  itemId: int('item_id').references(() => tripItems.id, { onDelete: 'set null' }), // optional link to a trip_item
   sortOrder: int('sort_order').notNull().default(0),
 });
 
