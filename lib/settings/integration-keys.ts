@@ -3,13 +3,14 @@ import { db } from '@/lib/db/drizzle';
 import { integrationSettings } from '@/lib/db/schema';
 
 export type IntegrationField =
-  | 'serpapiKey' | 'pexelsApiKey' | 'hapuppyApiKey'
+  | 'serpapiKey' | 'ignavApiKey' | 'pexelsApiKey' | 'hapuppyApiKey'
   | 'cloudflareAccountId' | 'cloudflareImagesApiToken'
   | 'r2AccountId' | 'r2AccessKeyId' | 'r2SecretAccessKey' | 'r2BucketName' | 'r2PublicUrlBase';
 
 function envFallback(): Record<IntegrationField, string | undefined> {
   return {
     serpapiKey: process.env.SERPAPI_KEY,
+    ignavApiKey: process.env.IGNAV_API_KEY,
     pexelsApiKey: process.env.PEXELS_API_KEY,
     hapuppyApiKey: process.env.HAPUPPY_API_KEY,
     cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID,

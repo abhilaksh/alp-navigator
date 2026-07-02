@@ -29,6 +29,7 @@ interface ItemRateCardProps {
   onSourceChange: (rateId: number, source: string) => void;
   onSelectProposal: (rateId: number, proposal: ParsedItemRate) => void;
   onExpiryChange?: (rateId: number, expiresAt: string | null) => void;
+  onRefreshBookingLink?: (rateId: number) => Promise<void>;
 }
 
 const SOURCES = [
@@ -58,11 +59,12 @@ function summaryFor(parsed: ParsedItemRate, itemType: string): string {
   return parts.join(' · ');
 }
 
-export function ItemRateCard({ rate, index, itemType, onRemove, onParse, onSourceChange, onSelectProposal, onExpiryChange }: ItemRateCardProps) {
+export function ItemRateCard({ rate, index, itemType, onRemove, onParse, onSourceChange, onSelectProposal, onExpiryChange, onRefreshBookingLink }: ItemRateCardProps) {
   const [expanded, setExpanded] = useState(true);
   const [localText, setLocalText] = useState(rate.rawText ?? '');
   const [parsing, setParsing] = useState(false);
   const [showExpiryInput, setShowExpiryInput] = useState(false);
+  const [fetchingLink, setFetchingLink] = useState(false);
 
   const parsed: ParsedItemRate | null = rate.parsedData ? (() => { try { return JSON.parse(rate.parsedData!); } catch { return null; } })() : null;
   const proposals: ParsedItemRate[] = rate.proposals ? (() => { try { return JSON.parse(rate.proposals!); } catch { return []; } })() : [];
@@ -90,6 +92,12 @@ export function ItemRateCard({ rate, index, itemType, onRemove, onParse, onSourc
     if (!localText.trim() || parsing) return;
     setParsing(true);
     try { await onParse(rate.id, localText); } finally { setParsing(false); }
+  }
+
+  async function handleRefreshBookingLink() {
+    if (!onRefreshBookingLink || fetchingLink) return;
+    setFetchingLink(true);
+    try { await onRefreshBookingLink(rate.id); } finally { setFetchingLink(false); }
   }
 
   const summary = parsed ? summaryFor(parsed, itemType) : null;
@@ -254,7 +262,9 @@ export function ItemRateCard({ rate, index, itemType, onRemove, onParse, onSourc
             </div>
           )}
 
-          {effectiveStatus === 'done' && parsed && <DoneState parsed={parsed} itemType={itemType} />}
+          {effectiveStatus === 'done' && parsed && (
+            <DoneState parsed={parsed} itemType={itemType} onRefreshBookingLink={handleRefreshBookingLink} fetchingLink={fetchingLink} />
+          )}
 
           {effectiveStatus === 'done' && isStale && (
             <div className="mx-2.5 mb-2.5 px-2.5 py-1.5 rounded-sm flex items-center gap-1.5 text-[10px] font-sans" style={{ background: 'rgba(217,119,6,0.07)', border: '1px solid rgba(217,119,6,0.2)', color: '#92400e' }}>
@@ -277,10 +287,44 @@ export function ItemRateCard({ rate, index, itemType, onRemove, onParse, onSourc
 }
 
 /* ─── Done state (type-aware) ────────────────────────────────────────────── */
-function DoneState({ parsed, itemType }: { parsed: ParsedItemRate; itemType: string }) {
+function DoneState({
+  parsed, itemType, onRefreshBookingLink, fetchingLink,
+}: {
+  parsed: ParsedItemRate; itemType: string; onRefreshBookingLink?: () => void; fetchingLink?: boolean;
+}) {
   return (
     <div className="px-2.5 pb-3">
       <TypeIdentity parsed={parsed} itemType={itemType} />
+
+      {itemType === 'flight' && parsed.ignav_id && (
+        <div className="flex items-center gap-2 mb-2.5">
+          <span
+            className="font-mono text-[9px] font-medium uppercase tracking-[0.06em] px-1.5 py-0.5 rounded-sm"
+            style={{ background: 'rgba(169,139,82,0.1)', color: '#A98B52' }}
+          >
+            Ignav
+          </span>
+          {parsed.booking_url ? (
+            <a
+              href={parsed.booking_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-sans text-spruce underline hover:opacity-70 transition-opacity"
+            >
+              Booking link ↗
+            </a>
+          ) : onRefreshBookingLink && (
+            <button
+              onClick={onRefreshBookingLink}
+              disabled={fetchingLink}
+              className="text-[11px] font-sans text-ink-mute hover:text-spruce transition-colors cursor-pointer disabled:opacity-50"
+              style={{ background: 'none', border: 'none', padding: 0 }}
+            >
+              {fetchingLink ? 'Fetching…' : 'Get booking link'}
+            </button>
+          )}
+        </div>
+      )}
 
       {parsed.date_mismatch && (
         <div

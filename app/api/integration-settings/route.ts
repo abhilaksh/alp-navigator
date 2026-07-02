@@ -6,7 +6,7 @@ import { getUser } from '@/lib/db/queries';
 import { getAllIntegrationKeys, type IntegrationField } from '@/lib/settings/integration-keys';
 
 const FIELDS: IntegrationField[] = [
-  'serpapiKey', 'pexelsApiKey', 'hapuppyApiKey',
+  'serpapiKey', 'ignavApiKey', 'pexelsApiKey', 'hapuppyApiKey',
   'cloudflareAccountId', 'cloudflareImagesApiToken',
   'r2AccountId', 'r2AccessKeyId', 'r2SecretAccessKey', 'r2BucketName', 'r2PublicUrlBase',
 ];

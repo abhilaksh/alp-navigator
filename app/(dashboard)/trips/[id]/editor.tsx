@@ -7,6 +7,7 @@ import { Topbar, type SaveStatus, type WorkflowStatus, type IntakeStatus } from 
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
 import { LineItemCard, type LineItemState } from '@/components/editor/line-item-card';
 import { SearchPanel, type SearchResult } from '@/components/editor/search-panel';
+import { FlightSearchPanel, type FlightItinerary, type FlightLeg } from '@/components/editor/flight-search-panel';
 import type { ParsedRate, ParsedItemRate } from '@/lib/db/schema';
 import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
 import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, updateItemRate, isHotelItem } from './editor-utils';
@@ -173,6 +174,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [showShare, setShowShare]   = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
+  const [flightSearchOpen, setFlightSearchOpen] = useState(false);
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated                    = useRef(false);
 
@@ -902,6 +904,16 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }).catch(() => {});
   }
 
+  async function handleRefreshBookingLink(rateId: number) {
+    try {
+      const res = await fetch(`/api/item-rates/${rateId}/booking-link`, { method: 'POST' });
+      if (res.ok) {
+        const updated = await res.json();
+        setDests(prev => updateItemRate(prev, rateId, () => updated));
+      }
+    } catch { /* no-op */ }
+  }
+
   function handleSelectItemRateProposal(rateId: number, proposal: ParsedItemRate) {
     setDests(prev => updateItemRate(prev, rateId, r => ({
       ...r,
@@ -937,6 +949,40 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
       setNewItemIds(prev => new Set(prev).add(data.id));
     }
+  }
+
+  async function addFlightLeg(itin: FlightItinerary, destinationId: number, leg: FlightLeg, includePrice: boolean) {
+    const res = await fetch('/api/flights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tripId: id, destinationId, leg,
+        ignavId: itin.ignavId, cabinClass: itin.cabinClass,
+        priceAmount: includePrice ? itin.priceAmount : null,
+        currency: itin.currency,
+      }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const destItems = destinations.find(d => d.id === destinationId)?.items ?? [];
+    const newItem: LineItemState = {
+      id: data.item.id, type: 'flight', title: data.item.title,
+      bookingStatus: 'researching', bookingRef: null,
+      confirmedTotalInr: null, startDate: null, endDate: null,
+      cancellationFreeUntil: null, visaRequired: 0,
+      detailsJson: null, sortOrder: destItems.length,
+      itemRates: [data.itemRate],
+    };
+    setDests(prev => updateDest(prev, destinationId, d => ({ ...d, items: [...d.items, newItem] })));
+  }
+
+  async function handleAddFlightFromSearch(itin: FlightItinerary, destinationId: number) {
+    await addFlightLeg(itin, destinationId, itin.outbound, true);
+  }
+
+  async function handleAddRoundTripFromSearch(itin: FlightItinerary, outboundDestId: number, inboundDestId: number) {
+    await addFlightLeg(itin, outboundDestId, itin.outbound, true);
+    if (itin.inbound) await addFlightLeg(itin, inboundDestId, itin.inbound, false);
   }
 
   async function handleUpdateLineItem(itemId: number, patch: Partial<LineItemState>) {
@@ -1665,6 +1711,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                       onRateSourceChange={handleItemRateSourceChange}
                       onSelectRateProposal={handleSelectItemRateProposal}
                       onRateExpiryChange={handleItemRateExpiryChange}
+                      onRefreshBookingLink={handleRefreshBookingLink}
                     />
                   );
                 })
@@ -1694,6 +1741,13 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   </button>
                 ))}
               </div>
+              <button
+                onClick={() => setFlightSearchOpen(true)}
+                className="flex items-center justify-center gap-[6px] w-full px-2.5 py-[9px] mt-2 text-[11px] text-brass border border-dashed rounded-[4px] cursor-pointer hover:opacity-80 transition-colors font-sans"
+                style={{ background: 'none', borderColor: 'rgba(169,139,82,0.4)' }}
+              >
+                ✦ Search flights (Ignav)
+              </button>
             </>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center py-24">
@@ -1714,16 +1768,29 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           className="bg-white overflow-hidden flex flex-col"
           style={{ flex: '0 0 35%', borderLeft: '1px solid #C9D2CC' }}
         >
-          <SearchPanel
-            destinationName={activeDest?.name ?? ''}
-            tripId={id}
-            destinationId={activeDestId}
-            destCheckin={activeDest?.checkin ?? null}
-            destCheckout={activeDest?.checkout ?? null}
-            addedHotelIds={addedHotelIds}
-            onAdd={handleAddHotelFromSearch}
-            onAddManual={handleAddManualHotel}
-          />
+          {flightSearchOpen ? (
+            <FlightSearchPanel
+              destinations={destinations.map(d => ({ id: d.id, name: d.name }))}
+              activeDestinationId={activeDestId ?? destinations[0]?.id ?? 0}
+              destCheckin={activeDest?.checkin ?? null}
+              destCheckout={activeDest?.checkout ?? null}
+              defaultAdults={adults}
+              onAddOneWay={handleAddFlightFromSearch}
+              onAddRoundTrip={handleAddRoundTripFromSearch}
+              onClose={() => setFlightSearchOpen(false)}
+            />
+          ) : (
+            <SearchPanel
+              destinationName={activeDest?.name ?? ''}
+              tripId={id}
+              destinationId={activeDestId}
+              destCheckin={activeDest?.checkin ?? null}
+              destCheckout={activeDest?.checkout ?? null}
+              addedHotelIds={addedHotelIds}
+              onAdd={handleAddHotelFromSearch}
+              onAddManual={handleAddManualHotel}
+            />
+          )}
         </div>
         </>)}
       </div>

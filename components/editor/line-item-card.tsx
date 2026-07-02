@@ -39,6 +39,7 @@ interface LineItemCardProps {
   onRateSourceChange: (rateId: number, source: string) => void;
   onSelectRateProposal: (rateId: number, proposal: ParsedItemRate) => void;
   onRateExpiryChange: (rateId: number, expiresAt: string | null) => void;
+  onRefreshBookingLink?: (rateId: number) => Promise<void>;
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -389,7 +390,7 @@ function ActivityForm({ f, set }: { f: Fields; set: (k: keyof Fields, v: string 
 /* ─── Main card ───────────────────────────────────────────────────────────── */
 export function LineItemCard({
   item, defaultOpen = false, onUpdate, onDelete,
-  onAddRate, onRemoveRate, onParseRate, onRateSourceChange, onSelectRateProposal, onRateExpiryChange,
+  onAddRate, onRemoveRate, onParseRate, onRateSourceChange, onSelectRateProposal, onRateExpiryChange, onRefreshBookingLink,
 }: LineItemCardProps) {
   const [expanded, setExpanded] = useState(defaultOpen);
   const [saving, setSaving] = useState(false);
@@ -510,6 +511,7 @@ export function LineItemCard({
                 onSourceChange={onRateSourceChange}
                 onSelectProposal={onSelectRateProposal}
                 onExpiryChange={onRateExpiryChange}
+                onRefreshBookingLink={onRefreshBookingLink}
               />
             ))}
             <button

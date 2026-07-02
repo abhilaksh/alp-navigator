@@ -447,6 +447,7 @@ export const integrationSettings = mysqlTable('integration_settings', {
   id: int('id').autoincrement().primaryKey(),
   teamId: int('team_id').notNull().references(() => teams.id).unique(),
   serpapiKey: text('serpapi_key'),
+  ignavApiKey: text('ignav_api_key'),
   pexelsApiKey: text('pexels_api_key'),
   hapuppyApiKey: text('hapuppy_api_key'),
   cloudflareAccountId: text('cloudflare_account_id'),
@@ -578,6 +579,8 @@ export type ParsedItemRate = {
   teen_count?: number;
   child_count?: number;
   infant_count?: number;
+  ignav_id?: string;
+  booking_url?: string;
   // transfer
   mode?: 'car' | 'train' | 'ferry' | 'bus' | 'other';
   vehicle_or_class?: string;

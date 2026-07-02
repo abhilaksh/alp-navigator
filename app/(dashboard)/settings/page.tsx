@@ -22,14 +22,14 @@ const EMPTY: AdvisorProfile = {
 };
 
 interface IntegrationKeys {
-  serpapiKey: string; pexelsApiKey: string; hapuppyApiKey: string;
+  serpapiKey: string; ignavApiKey: string; pexelsApiKey: string; hapuppyApiKey: string;
   cloudflareAccountId: string; cloudflareImagesApiToken: string;
   r2AccountId: string; r2AccessKeyId: string; r2SecretAccessKey: string;
   r2BucketName: string; r2PublicUrlBase: string;
 }
 
 const EMPTY_KEYS: IntegrationKeys = {
-  serpapiKey: '', pexelsApiKey: '', hapuppyApiKey: '',
+  serpapiKey: '', ignavApiKey: '', pexelsApiKey: '', hapuppyApiKey: '',
   cloudflareAccountId: '', cloudflareImagesApiToken: '',
   r2AccountId: '', r2AccessKeyId: '', r2SecretAccessKey: '',
   r2BucketName: '', r2PublicUrlBase: '',
@@ -260,6 +260,7 @@ export default function SettingsPage() {
           <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/40">Content sourcing</p>
           <div className="grid grid-cols-1 gap-4">
             <Field label="SerpApi key" placeholder="Used for live Google Hotels search" secret mono {...keyField('serpapiKey')} />
+            <Field label="Ignav API key" placeholder="Used for live flight fare search — leave blank to use the free anonymous tier" secret mono {...keyField('ignavApiKey')} />
             <Field label="Pexels API key" placeholder="Used for destination and itinerary photo search" secret mono {...keyField('pexelsApiKey')} />
             <Field label="Hapuppy API key" placeholder="Used for AI narrative generation and rate parsing" secret mono {...keyField('hapuppyApiKey')} />
           </div>
