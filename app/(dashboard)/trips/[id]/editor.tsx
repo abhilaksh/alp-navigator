@@ -540,7 +540,16 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   }
 
   async function handleRemoveHotel(itemId: number) {
-    await fetch(`/api/hotels/${itemId}`, { method: 'DELETE' }).catch(() => {});
+    // /api/hotels/[id] keys off hotelDetails.id, not the tripItems id -- resolve it
+    // before calling DELETE (was previously sending itemId, which always 404'd and
+    // silently left the row in the database, so it reappeared on refresh).
+    const hotelDetailId = destinations
+      .flatMap(d => d.items)
+      .filter(isHotelItem)
+      .find(i => i.id === itemId)?.hotelDetails?.id;
+    if (hotelDetailId != null) {
+      await fetch(`/api/hotels/${hotelDetailId}`, { method: 'DELETE' }).catch(() => {});
+    }
     setDests(prev => prev.map(d => ({ ...d, items: d.items.filter(i => i.id !== itemId) })));
   }
 

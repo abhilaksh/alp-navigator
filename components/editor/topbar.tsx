@@ -81,9 +81,16 @@ export function Topbar({
   });
   const fxLocked = fxUsdToInr != null;
 
-  // SLA alert: new inquiry with no acknowledgement for >1 hour
-  const slaBreached = intakeStatus === 'new_inquiry' && createdAt != null
-    && (Date.now() - new Date(createdAt).getTime()) > 3600000;
+  // SLA alert: new inquiry with no acknowledgement for >1 hour. Computed client-side
+  // only (post-mount) -- Date.now() in render can mismatch between server render
+  // time and client hydrate time, triggering a hydration error.
+  const [slaBreached, setSlaBreached] = useState(false);
+  useEffect(() => {
+    setSlaBreached(
+      intakeStatus === 'new_inquiry' && createdAt != null
+        && (Date.now() - new Date(createdAt).getTime()) > 3600000
+    );
+  }, [intakeStatus, createdAt]);
 
   useEffect(() => {
     function handler(e: MouseEvent) {
@@ -423,17 +430,24 @@ function FollowUpChip({ level }: { level: 'amber' | 'red' }) {
 }
 
 function ViewBadge({ firstViewedAt, viewCount }: { firstViewedAt: number; viewCount: number }) {
-  const ms = Date.now() - firstViewedAt;
-  const mins   = Math.floor(ms / 60000);
-  const hours  = Math.floor(ms / 3600000);
-  const days   = Math.floor(ms / 86400000);
-  const ago = days >= 1
-    ? `${days}d ago`
-    : hours >= 1
-      ? `${hours}h ago`
-      : mins >= 1
-        ? `${mins}m ago`
-        : 'just now';
+  // Computed client-side only (post-mount) -- same hydration-mismatch reasoning as
+  // slaBreached above.
+  const [ago, setAgo] = useState<string | null>(null);
+  useEffect(() => {
+    const ms = Date.now() - firstViewedAt;
+    const mins   = Math.floor(ms / 60000);
+    const hours  = Math.floor(ms / 3600000);
+    const days   = Math.floor(ms / 86400000);
+    setAgo(
+      days >= 1
+        ? `${days}d ago`
+        : hours >= 1
+          ? `${hours}h ago`
+          : mins >= 1
+            ? `${mins}m ago`
+            : 'just now'
+    );
+  }, [firstViewedAt]);
 
   return (
     <div
@@ -442,7 +456,7 @@ function ViewBadge({ firstViewedAt, viewCount }: { firstViewedAt: number; viewCo
       title={`First viewed ${new Date(firstViewedAt).toLocaleString('en-IN')} · ${viewCount} total view${viewCount !== 1 ? 's' : ''}`}
     >
       <Eye size={9} />
-      <span>Client viewed {ago}</span>
+      <span>Client viewed {ago ?? '…'}</span>
       {viewCount > 1 && <span className="opacity-60">· {viewCount}×</span>}
     </div>
   );
