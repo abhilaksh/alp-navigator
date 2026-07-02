@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       SELECT TABLE_NAME, CONSTRAINT_NAME, REFERENCED_TABLE_NAME, DELETE_RULE
       FROM information_schema.REFERENTIAL_CONSTRAINTS
       WHERE CONSTRAINT_SCHEMA = DATABASE()
-        AND TABLE_NAME IN ('hotel_details', 'rates', 'trip_items', 'item_rates')
+        AND REFERENCED_TABLE_NAME = 'trip_items'
     `);
     return NextResponse.json({ ok: true, constraints: result[0] });
   } catch (err) {
