@@ -9,7 +9,7 @@ type Params = { params: Promise<{ id: string }> };
 
 const FLIGHT_PROMPT = `Parse the flight fare confirmation text into structured JSON with these fields:
 airline, flight_number, cabin_class, fare_class ("refundable" or "non_refundable"),
-from, to, departure_datetime, arrival_datetime,
+from, to, departure_datetime, arrival_datetime, duration,
 baggage_checked, baggage_cabin, change_fee_inr, pnr,
 fare_adult_inr, fare_teen_inr, fare_child_inr, fare_infant_inr,
 adult_count, teen_count, child_count, infant_count,
@@ -17,6 +17,7 @@ taxes_inr, total_inr,
 cancellation_free (boolean), cancellation_deadline, cancellation_note.
 Age brackets: Adult is 12+, Teenager is 12-15 (only include if the fare rules explicitly distinguish a teen fare), Child is 2-12, Infant is under 2. Omit any fare_*_inr / *_count field for a bracket not mentioned in the text -- do not guess or default to zero.
 All INR amounts must be integers.
+departure_datetime and arrival_datetime MUST be in strict ISO 8601 format (YYYY-MM-DDTHH:MM, e.g. 2026-09-12T07:25) and represent LOCAL time at each respective airport (do not convert to UTC or any other timezone). duration is the total flight/journey time as stated in the text (e.g. "8h 45m") -- extract it directly rather than computing it from the timestamps, since departure and arrival can be in different timezones. cancellation_deadline MUST be in YYYY-MM-DD format. Never use a human-readable date format for departure_datetime/arrival_datetime/cancellation_deadline.
 If the text contains multiple fare options, return a JSON object with a "rates" key containing an array of rate objects, each having all the above fields.
 Otherwise return a single JSON object with those fields directly.
 Output only valid JSON with no markdown or code fences.`;
@@ -27,6 +28,7 @@ pickup, dropoff, transfer_datetime, is_per_vehicle (boolean),
 total_inr,
 cancellation_free (boolean), cancellation_deadline, cancellation_note.
 All INR amounts must be integers.
+transfer_datetime MUST be in strict ISO 8601 format (YYYY-MM-DDTHH:MM, e.g. 2026-09-12T07:25). cancellation_deadline MUST be in YYYY-MM-DD format. Never use a human-readable date format for these fields.
 If the text contains multiple options, return a JSON object with a "rates" key containing an array of rate objects, each having all the above fields.
 Otherwise return a single JSON object with those fields directly.
 Output only valid JSON with no markdown or code fences.`;
@@ -37,6 +39,7 @@ inclusions (array of strings), pax_count, is_per_person (boolean),
 total_inr, payment_due_date,
 cancellation_free (boolean), cancellation_deadline, cancellation_note.
 All INR amounts must be integers.
+activity_datetime MUST be in strict ISO 8601 format (YYYY-MM-DDTHH:MM, e.g. 2026-09-12T07:25). payment_due_date and cancellation_deadline MUST be in YYYY-MM-DD format. Never use a human-readable date format for these fields.
 If the text contains multiple options (e.g. private vs group), return a JSON object with a "rates" key containing an array of rate objects, each having all the above fields.
 Otherwise return a single JSON object with those fields directly.
 Output only valid JSON with no markdown or code fences.`;
@@ -60,12 +63,23 @@ function fmtDate(d: string): string {
   } catch { return d; }
 }
 
+function toIsoDate(raw: string): string | null {
+  // Defensive normalization -- the model is instructed to return ISO 8601, but
+  // fall back to parsing whatever it actually returned rather than silently
+  // comparing garbage strings lexicographically.
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+}
+
 function checkDateMismatch(rate: ParsedItemRate, type: string, destCheckin: string | null, destCheckout: string | null): ParsedItemRate {
   const field = dateFieldForType(type);
   if (!field || !destCheckin || !destCheckout) return rate;
   const raw = rate[field] as string | undefined;
   if (!raw) return rate;
-  const day = raw.slice(0, 10); // datetime string -> date part for comparison
+  const day = toIsoDate(raw);
+  if (!day) return rate;
   const outOfRange = day < destCheckin || day > destCheckout;
   if (!outOfRange) return rate;
   return {

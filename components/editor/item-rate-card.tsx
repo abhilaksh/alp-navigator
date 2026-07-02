@@ -366,6 +366,7 @@ function TypeIdentity({ parsed, itemType }: { parsed: ParsedItemRate; itemType: 
         <div className="font-mono text-[10px] text-ink-soft flex items-center gap-[7px] flex-wrap">
           {(parsed.from || parsed.to) && <span>{parsed.from ?? '?'} → {parsed.to ?? '?'}</span>}
           {parsed.departure_datetime && <span>· {parsed.departure_datetime.replace('T', ' ')}</span>}
+          {parsed.duration && <span>· {parsed.duration}</span>}
           {parsed.cabin_class && (
             <span className="inline-block bg-glacier text-ink-soft font-mono text-[9px] font-medium tracking-[0.07em] uppercase px-1.5 py-0.5 rounded-sm">
               {parsed.cabin_class}
