@@ -168,7 +168,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [togglingBlueprint, setTogglingBlueprint] = useState(false);
   const [destinations, setDests]    = useState<DestinationState[]>(() => mapDestinations(initialTrip.destinations));
   const [activeDestId, setActiveDest] = useState<number | null>(initialTrip.destinations[0]?.id ?? null);
-  const [activeView, setActiveView]   = useState<'editor' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes' | 'research' | 'engagement'>('editor');
+  const [activeView, setActiveView]   = useState<'editor' | 'overview' | 'itinerary' | 'bookings' | 'checklist' | 'payment' | 'changes' | 'research' | 'engagement'>('editor');
   const [changeRequestOpenCount, setChangeRequestOpenCount] = useState(0);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [showShare, setShowShare]   = useState(false);
@@ -189,6 +189,18 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     ((initialTrip as { urgencyFlag?: string | null }).urgencyFlag as 'standard' | 'urgent' | 'very_urgent' | null) ?? 'standard'
   );
   const clarificationFlagsRaw = (initialTrip as { clarificationFlags?: string | null }).clarificationFlags ?? null;
+
+  // Computed client-side only (post-mount) so server and first client render both
+  // produce `null` -- avoids a hydration mismatch when the value sits right at a
+  // day/hour threshold between server-render time and client-hydrate time.
+  const [followUpWarning, setFollowUpWarning] = useState<'amber' | 'red' | null>(null);
+  useEffect(() => {
+    if (status !== 'sent') { setFollowUpWarning(null); return; }
+    const fv = (initialTrip as { firstViewedAt?: number | null }).firstViewedAt;
+    if (fv != null) { setFollowUpWarning(null); return; }
+    const msSinceSent = Date.now() - new Date(initialTrip.updatedAt).getTime();
+    setFollowUpWarning(msSinceSent > 5 * 24 * 3600000 ? 'red' : msSinceSent > 48 * 3600000 ? 'amber' : null);
+  }, [status, initialTrip]);
 
   const activeDest  = destinations.find(d => d.id === activeDestId) ?? null;
   const hotelItems  = (activeDest?.items ?? []).filter(isHotelItem);
@@ -962,15 +974,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         createdAt={initialTrip.createdAt}
         isBlueprint={isBlueprint}
         onToggleBlueprint={togglingBlueprint ? undefined : handleToggleBlueprint}
-        followUpWarning={(() => {
-          if (status !== 'sent') return null;
-          const fv = (initialTrip as { firstViewedAt?: number | null }).firstViewedAt;
-          if (fv != null) return null;
-          const msSinceSent = Date.now() - new Date(initialTrip.updatedAt).getTime();
-          if (msSinceSent > 5 * 24 * 3600000) return 'red';
-          if (msSinceSent > 48 * 3600000) return 'amber';
-          return null;
-        })()}
+        followUpWarning={followUpWarning}
       />
 
       {/* Tab strip */}
@@ -1024,6 +1028,22 @@ export function Editor({ trip: initialTrip }: EditorProps) {
 
         {/* Separator */}
         <div className="mx-2 my-2.5" style={{ width: 1, background: '#C9D2CC', flexShrink: 0 }} />
+
+        {/* Overview tab */}
+        <button
+          onClick={() => setActiveView(v => v === 'overview' ? 'editor' : 'overview')}
+          className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
+          style={{
+            color: activeView === 'overview' ? '#161A17' : '#4A514B',
+            fontWeight: activeView === 'overview' ? 500 : 400,
+            background: 'none',
+          }}
+        >
+          Overview
+          {activeView === 'overview' && (
+            <span className="absolute bottom-0 left-4 right-4 h-[2px]" style={{ background: '#A98B52' }} />
+          )}
+        </button>
 
         {/* Research tab */}
         <button
@@ -1264,6 +1284,109 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           </div>
         )}
 
+        {/* Overview view — trip-wide content, not tied to any single destination */}
+        {activeView === 'overview' && (
+          <div className="flex-1 overflow-y-auto" style={{ background: '#F6F4EE' }}>
+            <div className="max-w-2xl mx-auto px-6 py-8">
+
+              {/* Trip notes */}
+              <textarea
+                value={notes}
+                onChange={e => handleNotesChange(e.target.value)}
+                placeholder="Internal notes…"
+                rows={notes ? undefined : 1}
+                className="w-full font-sans text-[12px] text-ink-soft bg-transparent border-none outline-none resize-none py-0 mb-[18px] leading-relaxed placeholder:text-ink-mute"
+                style={{ minHeight: 20 }}
+                onFocus={e => (e.currentTarget.rows = 3)}
+                onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 1; }}
+              />
+
+              {/* Proposal sections — personal note + journey overview */}
+              <div className="mb-[18px] rounded-[4px] overflow-hidden" style={{ border: '1px solid rgba(201,210,204,0.7)' }}>
+                <div className="px-3 py-2" style={{ background: '#F6F4EE', borderBottom: '1px solid rgba(201,210,204,0.7)' }}>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute">Proposal copy</p>
+                </div>
+
+                {/* Personal note */}
+                <div className="px-3 pt-2.5 pb-2" style={{ borderBottom: '1px solid rgba(201,210,204,0.5)' }}>
+                  <label className="block font-mono text-[9px] uppercase tracking-[0.08em] mb-[6px]" style={{ color: '#A98B52' }}>
+                    Personal note <span className="normal-case ml-1 opacity-60" style={{ fontFamily: 'inherit' }}>— your words, not AI</span>
+                  </label>
+                  <textarea
+                    value={personalNote}
+                    onChange={e => handlePersonalNoteChange(e.target.value)}
+                    placeholder={`Dear ${clientName ?? 'traveller'}, based on what you shared…`}
+                    rows={2}
+                    className="w-full font-sans text-[12px] text-ink bg-transparent border-none outline-none resize-none leading-relaxed placeholder:text-ink-mute"
+                    style={{ minHeight: 40 }}
+                    onFocus={e => (e.currentTarget.rows = 4)}
+                    onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 2; }}
+                  />
+                </div>
+
+                {/* Journey overview */}
+                <div className="px-3 pt-2.5 pb-3">
+                  <div className="flex items-center justify-between mb-[6px]">
+                    <label className="font-mono text-[9px] uppercase tracking-[0.08em]" style={{ color: '#4A514B' }}>
+                      Journey overview
+                    </label>
+                    <button
+                      onClick={handleGenerateOverview}
+                      disabled={generatingOverview}
+                      className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.06em] px-2 py-[3px] rounded-[2px] cursor-pointer disabled:opacity-40 transition-opacity"
+                      style={{ background: 'rgba(169,139,82,0.08)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.22)' }}
+                    >
+                      {generatingOverview ? <Loader2 size={9} className="spin" /> : <Sparkles size={9} />}
+                      {generatingOverview ? 'Generating…' : 'Generate'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={journeyOverview}
+                    onChange={e => handleJourneyOverviewChange(e.target.value)}
+                    placeholder="The emotional arc of this journey…"
+                    rows={journeyOverview ? undefined : 2}
+                    className="w-full font-sans text-[12px] text-ink bg-transparent border-none outline-none resize-none leading-relaxed placeholder:text-ink-mute"
+                    style={{ minHeight: 40 }}
+                    onFocus={e => (e.currentTarget.rows = 4)}
+                    onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 2; }}
+                  />
+                </div>
+              </div>
+
+              {/* Version history */}
+              <div className="mb-[18px]">
+                <VersionHistoryPanel
+                  tripId={id}
+                  tripStatus={status}
+                />
+              </div>
+
+              {/* Intake brief: budget, urgency, clarification flags */}
+              <IntakePanel
+                tripId={id}
+                budgetStatedInr={budgetStatedInr}
+                budgetEstimatedInr={budgetEstimatedInr}
+                urgencyFlag={urgencyFlag}
+                clarificationFlagsRaw={clarificationFlagsRaw}
+              />
+
+              {/* Client context (preferences + passport) */}
+              {clientId && (
+                <div className="mb-[18px]">
+                  <ClientContextPanel
+                    clientId={clientId}
+                    clientName={clientName}
+                    clientPreferencesRaw={clientPreferencesRaw}
+                    passportExpiry={clientPassportExpiry}
+                    nationality={clientNationality}
+                  />
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
+
         {/* Editor view */}
         {activeView === 'editor' && (<>
 
@@ -1367,102 +1490,6 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   placeholder={`${activeDest.name ?? 'destination'} travel photo`}
                 />
               </div>
-
-              {/* Trip notes */}
-              {(notes || true) && (
-                <textarea
-                  value={notes}
-                  onChange={e => handleNotesChange(e.target.value)}
-                  placeholder="Internal notes…"
-                  rows={notes ? undefined : 1}
-                  className="w-full font-sans text-[12px] text-ink-soft bg-transparent border-none outline-none resize-none py-0 mb-[18px] leading-relaxed placeholder:text-ink-mute"
-                  style={{ minHeight: 20 }}
-                  onFocus={e => (e.currentTarget.rows = 3)}
-                  onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 1; }}
-                />
-              )}
-
-              {/* Proposal sections — personal note + journey overview */}
-              <div className="mb-[18px] rounded-[4px] overflow-hidden" style={{ border: '1px solid rgba(201,210,204,0.7)' }}>
-                <div className="px-3 py-2" style={{ background: '#F6F4EE', borderBottom: '1px solid rgba(201,210,204,0.7)' }}>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute">Proposal copy</p>
-                </div>
-
-                {/* Personal note */}
-                <div className="px-3 pt-2.5 pb-2" style={{ borderBottom: '1px solid rgba(201,210,204,0.5)' }}>
-                  <label className="block font-mono text-[9px] uppercase tracking-[0.08em] mb-[6px]" style={{ color: '#A98B52' }}>
-                    Personal note <span className="normal-case ml-1 opacity-60" style={{ fontFamily: 'inherit' }}>— your words, not AI</span>
-                  </label>
-                  <textarea
-                    value={personalNote}
-                    onChange={e => handlePersonalNoteChange(e.target.value)}
-                    placeholder={`Dear ${clientName ?? 'traveller'}, based on what you shared…`}
-                    rows={2}
-                    className="w-full font-sans text-[12px] text-ink bg-transparent border-none outline-none resize-none leading-relaxed placeholder:text-ink-mute"
-                    style={{ minHeight: 40 }}
-                    onFocus={e => (e.currentTarget.rows = 4)}
-                    onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 2; }}
-                  />
-                </div>
-
-                {/* Journey overview */}
-                <div className="px-3 pt-2.5 pb-3">
-                  <div className="flex items-center justify-between mb-[6px]">
-                    <label className="font-mono text-[9px] uppercase tracking-[0.08em]" style={{ color: '#4A514B' }}>
-                      Journey overview
-                    </label>
-                    <button
-                      onClick={handleGenerateOverview}
-                      disabled={generatingOverview}
-                      className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.06em] px-2 py-[3px] rounded-[2px] cursor-pointer disabled:opacity-40 transition-opacity"
-                      style={{ background: 'rgba(169,139,82,0.08)', color: '#A98B52', border: '1px solid rgba(169,139,82,0.22)' }}
-                    >
-                      {generatingOverview ? <Loader2 size={9} className="spin" /> : <Sparkles size={9} />}
-                      {generatingOverview ? 'Generating…' : 'Generate'}
-                    </button>
-                  </div>
-                  <textarea
-                    value={journeyOverview}
-                    onChange={e => handleJourneyOverviewChange(e.target.value)}
-                    placeholder="The emotional arc of this journey…"
-                    rows={journeyOverview ? undefined : 2}
-                    className="w-full font-sans text-[12px] text-ink bg-transparent border-none outline-none resize-none leading-relaxed placeholder:text-ink-mute"
-                    style={{ minHeight: 40 }}
-                    onFocus={e => (e.currentTarget.rows = 4)}
-                    onBlur={e => { if (!e.currentTarget.value) e.currentTarget.rows = 2; }}
-                  />
-                </div>
-              </div>
-
-              {/* Version history */}
-              <div className="mb-[18px]">
-                <VersionHistoryPanel
-                  tripId={id}
-                  tripStatus={status}
-                />
-              </div>
-
-              {/* Intake brief: budget, urgency, clarification flags */}
-              <IntakePanel
-                tripId={id}
-                budgetStatedInr={budgetStatedInr}
-                budgetEstimatedInr={budgetEstimatedInr}
-                urgencyFlag={urgencyFlag}
-                clarificationFlagsRaw={clarificationFlagsRaw}
-              />
-
-              {/* Client context (preferences + passport) */}
-              {clientId && (
-                <div className="mb-[18px]">
-                  <ClientContextPanel
-                    clientId={clientId}
-                    clientName={clientName}
-                    clientPreferencesRaw={clientPreferencesRaw}
-                    passportExpiry={clientPassportExpiry}
-                    nationality={clientNationality}
-                  />
-                </div>
-              )}
 
               {/* Hold expiry warning banner */}
               {expiringHolds.length > 0 && (
