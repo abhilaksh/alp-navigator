@@ -260,7 +260,7 @@ export default function SettingsPage() {
           <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/40">Content sourcing</p>
           <div className="grid grid-cols-1 gap-4">
             <Field label="SerpApi key" placeholder="Used for live Google Hotels search" secret mono {...keyField('serpapiKey')} />
-            <Field label="Ignav API key" placeholder="Used for live flight fare search — leave blank to use the free anonymous tier" secret mono {...keyField('ignavApiKey')} />
+            <Field label="Ignav API key" placeholder="Required for live flight fare search — get one at ignav.com" secret mono {...keyField('ignavApiKey')} />
             <Field label="Pexels API key" placeholder="Used for destination and itinerary photo search" secret mono {...keyField('pexelsApiKey')} />
             <Field label="Hapuppy API key" placeholder="Used for AI narrative generation and rate parsing" secret mono {...keyField('hapuppyApiKey')} />
           </div>

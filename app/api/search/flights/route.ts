@@ -47,6 +47,7 @@ function mapLeg(leg: IgnavLeg | undefined) {
     departure_datetime: first.departure_time_local ?? null,
     arrival_datetime: last.arrival_time_local ?? null,
     duration: formatDuration(leg.duration_minutes),
+    durationMinutes: leg.duration_minutes ?? null,
     stops: leg.segments.length - 1,
     segments: leg.segments,
   };
@@ -99,9 +100,10 @@ export async function POST(req: NextRequest) {
 
   if (!response.ok) {
     const errText = await response.text();
+    const passthroughStatus = response.status === 401 || response.status === 402 ? response.status : 502;
     return NextResponse.json(
-      { error: `Ignav error ${response.status}: ${errText}` },
-      { status: response.status === 402 ? 402 : 502 },
+      { error: `Ignav error ${response.status}: ${errText}`, requiresApiKey: response.status === 401 },
+      { status: passthroughStatus },
     );
   }
 

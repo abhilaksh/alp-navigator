@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
 
   if (!response.ok) {
     const errText = await response.text();
-    return NextResponse.json({ error: `Ignav error ${response.status}: ${errText}` }, { status: response.status === 402 ? 402 : 502 });
+    const passthroughStatus = response.status === 401 || response.status === 402 ? response.status : 502;
+    return NextResponse.json({ error: `Ignav error ${response.status}: ${errText}`, requiresApiKey: response.status === 401 }, { status: passthroughStatus });
   }
 
   const airports: IgnavAirport[] = await response.json();

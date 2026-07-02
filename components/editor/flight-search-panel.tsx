@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Plus, Loader2, AlertCircle, ArrowLeft, Repeat, ArrowRight } from 'lucide-react';
 
 export interface FlightLeg {
@@ -11,6 +11,7 @@ export interface FlightLeg {
   departure_datetime: string | null;
   arrival_datetime: string | null;
   duration: string | null;
+  durationMinutes: number | null;
   stops: number;
 }
 
@@ -106,6 +107,8 @@ export function FlightSearchPanel({
   const [adults, setAdults] = useState(defaultAdults ?? 1);
   const [children, setChildren] = useState(0);
   const [cabinClass, setCabinClass] = useState('economy');
+  const [maxStops, setMaxStops] = useState<string>('any');
+  const [sortBy, setSortBy] = useState<'price' | 'duration' | 'stops'>('price');
   const [results, setResults] = useState<FlightItinerary[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +116,22 @@ export function FlightSearchPanel({
   const [confirmingRoundTrip, setConfirmingRoundTrip] = useState<FlightItinerary | null>(null);
   const [outboundDestId, setOutboundDestId] = useState(activeDestinationId);
   const [inboundDestId, setInboundDestId] = useState(activeDestinationId);
+
+  const sortedResults = useMemo(() => {
+    const totalMinutes = (itin: FlightItinerary) =>
+      (itin.outbound.durationMinutes ?? 0) + (itin.inbound?.durationMinutes ?? 0);
+    const totalStops = (itin: FlightItinerary) =>
+      itin.outbound.stops + (itin.inbound?.stops ?? 0);
+    const sorted = [...results];
+    if (sortBy === 'price') {
+      sorted.sort((a, b) => (a.priceAmount ?? Infinity) - (b.priceAmount ?? Infinity));
+    } else if (sortBy === 'duration') {
+      sorted.sort((a, b) => totalMinutes(a) - totalMinutes(b));
+    } else {
+      sorted.sort((a, b) => totalStops(a) - totalStops(b));
+    }
+    return sorted;
+  }, [results, sortBy]);
 
   async function doSearch() {
     if (!origin || !destination || !departureDate) return;
@@ -127,9 +146,16 @@ export function FlightSearchPanel({
           origin, destination, departureDate,
           returnDate: tripType === 'round_trip' ? returnDate : undefined,
           adults, children, cabinClass,
+          maxStops: maxStops === 'any' ? undefined : Number(maxStops),
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        if (body?.requiresApiKey) {
+          throw new Error('An Ignav API key is required for flight search. Add one in Settings → Integrations.');
+        }
+        throw new Error(body?.error ?? 'Search failed');
+      }
       const data = await res.json();
       setResults(data.results ?? []);
       setStatus('done');
@@ -249,6 +275,18 @@ export function FlightSearchPanel({
               <option value="first">First</option>
             </select>
           </div>
+          <div className="flex-1">
+            <label className="block text-[9px] font-medium uppercase tracking-[0.07em] text-ink-mute mb-[3px]">Stops</label>
+            <select
+              value={maxStops} onChange={e => setMaxStops(e.target.value)}
+              className="w-full px-1.5 py-[5px] border border-glacier rounded-sm font-sans text-[11px] text-ink bg-paper outline-none cursor-pointer"
+            >
+              <option value="any">Any</option>
+              <option value="0">Nonstop</option>
+              <option value="1">1 stop max</option>
+              <option value="2">2 stops max</option>
+            </select>
+          </div>
         </div>
 
         <button
@@ -299,7 +337,25 @@ export function FlightSearchPanel({
 
         {status === 'done' && results.length > 0 && (
           <div className="flex flex-col gap-[7px] pt-1.5">
-            {results.map((itin, idx) => (
+            <div className="flex items-center gap-[6px] px-1 mb-0.5">
+              <span className="text-[9px] uppercase tracking-[0.07em] text-ink-mute">Sort</span>
+              {(['price', 'duration', 'stops'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setSortBy(s)}
+                  className="text-[10px] font-sans px-2 py-[3px] rounded-full border cursor-pointer transition-all"
+                  style={{
+                    background: sortBy === s ? '#1E3A2F' : 'transparent',
+                    color: sortBy === s ? '#F6F4EE' : '#4A514B',
+                    borderColor: sortBy === s ? '#1E3A2F' : '#C9D2CC',
+                  }}
+                >
+                  {s === 'price' ? 'Price' : s === 'duration' ? 'Duration' : 'Fewest stops'}
+                </button>
+              ))}
+              <span className="ml-auto text-[9px] text-ink-mute font-mono">{sortedResults.length} results</span>
+            </div>
+            {sortedResults.map((itin, idx) => (
               <ItineraryCard
                 key={itin.ignavId ?? idx}
                 itin={itin}
