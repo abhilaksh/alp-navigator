@@ -287,12 +287,16 @@ export const itineraryBlocks = mysqlTable('itinerary_blocks', {
   id: int('id').autoincrement().primaryKey(),
   dayId: int('day_id').notNull().references(() => itineraryDays.id, { onDelete: 'cascade' }),
   type: varchar('type', { length: 30 }).notNull(),
-  // 'text' | 'hotel_ref' | 'activity_ref' | 'transport_note' |
-  // 'tip' | 'meal' | 'image' | 'map_pin'
-  content: text('content'),                 // rich text or JSON depending on type
+  // 'text' | 'tip' | 'meal' | 'transport_note' | 'hotel_ref' | 'map_pin' |
+  // 'image' | 'video' | 'pdf'
+  content: text('content'),                 // rich text, or JSON for image/video/pdf
   itemId: int('item_id').references(() => tripItems.id), // optional link to a trip_item
   sortOrder: int('sort_order').notNull().default(0),
 });
+
+export const ITINERARY_BLOCK_TYPES = [
+  'text', 'tip', 'meal', 'transport_note', 'hotel_ref', 'map_pin', 'image', 'video', 'pdf',
+] as const;
 
 // ─── Relations ────────────────────────────────────────────────────────────────
 

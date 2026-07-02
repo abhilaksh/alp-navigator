@@ -40,9 +40,6 @@ function NarrativeBlock({ destId, narrative, destName, nights, hotelNames, clien
   const [value, setValue]     = useState(narrative ?? '');
   const [generating, setGen]  = useState(false);
 
-  // keep in sync if parent updates
-  useState(() => { setValue(narrative ?? ''); });
-
   async function generate() {
     setGen(true);
     try {
@@ -988,7 +985,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
           return (
             <button
               key={dest.id}
-              onClick={() => setActiveDest(dest.id)}
+              onClick={() => { setActiveDest(dest.id); setActiveView('editor'); }}
               className="relative inline-flex items-center gap-[7px] px-4 font-sans text-[13px] border-none bg-none cursor-pointer whitespace-nowrap transition-colors"
               style={{
                 color: isActive ? '#161A17' : '#4A514B',
@@ -1350,6 +1347,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
 
               {/* Destination narrative */}
               <NarrativeBlock
+                key={activeDest.id}
                 destId={activeDest.id}
                 narrative={activeDest.narrative ?? null}
                 destName={activeDest.name}

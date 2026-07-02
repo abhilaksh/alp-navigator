@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { itineraryBlocks, itineraryDays } from '@/lib/db/schema';
+import { itineraryBlocks, itineraryDays, ITINERARY_BLOCK_TYPES } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
 
@@ -22,6 +22,9 @@ export async function POST(req: NextRequest) {
   const { dayId, type, content, itemId, sortOrder } = body;
 
   if (!dayId || !type) return NextResponse.json({ error: 'dayId and type required' }, { status: 400 });
+  if (!ITINERARY_BLOCK_TYPES.includes(type)) {
+    return NextResponse.json({ error: `Invalid block type: ${type}` }, { status: 400 });
+  }
 
   const day = await verifyDayOwnership(dayId, user.id);
   if (!day) return NextResponse.json({ error: 'Not found' }, { status: 404 });

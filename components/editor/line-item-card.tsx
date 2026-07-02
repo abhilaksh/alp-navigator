@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plane, Car, Ticket, Star, ChevronRight, X, Check } from 'lucide-react';
+import { Plane, Car, Ticket, Star, ChevronRight, X, Check, TrainFront, Ship, Bus } from 'lucide-react';
 
 export type LineItemType = 'flight' | 'transfer' | 'activity' | 'experience';
 
@@ -43,6 +43,25 @@ const TYPE_LABELS: Record<string, string> = {
   flight: 'Flight', transfer: 'Transfer', activity: 'Activity', experience: 'Experience',
 };
 
+const TRANSFER_MODE_META: Record<string, { label: string; detailLabel: string; detailPlaceholder: string }> = {
+  car:   { label: 'Private car', detailLabel: 'Vehicle type',    detailPlaceholder: 'Mercedes S-Class' },
+  train: { label: 'Train',       detailLabel: 'Class / service', detailPlaceholder: 'First class, Eurostar' },
+  ferry: { label: 'Ferry',       detailLabel: 'Class / vessel',  detailPlaceholder: 'Business, high-speed catamaran' },
+  bus:   { label: 'Bus',         detailLabel: 'Details',         detailPlaceholder: 'Private coach, 12 seats' },
+  other: { label: 'Other',       detailLabel: 'Details',         detailPlaceholder: 'Details' },
+};
+
+function getItemIcon(item: LineItemState): React.ReactNode {
+  if (item.type === 'transfer') {
+    const mode = String(item.detailsJson?.mode ?? 'car');
+    if (mode === 'train') return <TrainFront size={12} />;
+    if (mode === 'ferry') return <Ship size={12} />;
+    if (mode === 'bus') return <Bus size={12} />;
+    return <Car size={12} />;
+  }
+  return TYPE_ICONS[item.type] ?? null;
+}
+
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   researching: { label: 'Researching', color: '#4A514B', bg: 'rgba(22,26,23,0.06)' },
   quoted:      { label: 'Quoted',      color: '#A98B52', bg: 'rgba(169,139,82,0.10)' },
@@ -64,7 +83,7 @@ type Fields = {
   departureDateTime: string; arrivalDateTime: string;
   farePerPersonInr: string; passengers: string; pnr: string; isEstimated: boolean; expiryDate: string;
   // transfer
-  pickupLocation: string; dropoffLocation: string; vehicleType: string;
+  pickupLocation: string; dropoffLocation: string; vehicleType: string; transferMode: string;
   transferDateTime: string; isPerVehicle: boolean; operator: string; quoteRef: string;
   // activity
   activityName: string; activityOperator: string; activityDateTime: string;
@@ -87,7 +106,7 @@ function initFields(item: LineItemState): Fields {
     passengers: s('passengers', '2'), pnr: s('pnr'), isEstimated: b('isEstimated', true),
     expiryDate: s('expiryDate'),
     pickupLocation: s('pickupLocation'), dropoffLocation: s('dropoffLocation'),
-    vehicleType: s('vehicleType'), transferDateTime: s('dateTime'),
+    vehicleType: s('vehicleType'), transferMode: s('mode', 'car'), transferDateTime: s('dateTime'),
     isPerVehicle: b('isPerVehicle', true), operator: s('operator'), quoteRef: s('quoteRef'),
     activityName: s('activityName', item.title), activityOperator: s('operator'),
     activityDateTime: s('dateTime'), isPerPerson: b('isPerPerson', true),
@@ -113,6 +132,7 @@ function buildDetailsJson(type: string, f: Fields): Record<string, unknown> {
   if (type === 'transfer') return {
     ...(f.pickupLocation && { pickupLocation: f.pickupLocation }),
     ...(f.dropoffLocation && { dropoffLocation: f.dropoffLocation }),
+    mode: f.transferMode || 'car',
     ...(f.vehicleType && { vehicleType: f.vehicleType }),
     ...(f.transferDateTime && { dateTime: f.transferDateTime }),
     isPerVehicle: f.isPerVehicle,
@@ -151,7 +171,9 @@ function collapsedSummary(item: LineItemState): string {
     return parts.join(' · ') || 'Flight details';
   }
   if (item.type === 'transfer') {
+    const mode = s('mode') || 'car';
     const parts: string[] = [];
+    if (mode !== 'car') parts.push(TRANSFER_MODE_META[mode]?.label ?? mode);
     if (s('pickupLocation') || s('dropoffLocation')) parts.push(`${s('pickupLocation') || '?'} → ${s('dropoffLocation') || '?'}`);
     if (s('dateTime')) parts.push(s('dateTime').replace('T', ' '));
     return parts.join(' · ') || 'Transfer details';
@@ -291,16 +313,31 @@ function FlightForm({ f, set }: { f: Fields; set: (k: keyof Fields, v: string | 
 }
 
 function TransferForm({ f, set }: { f: Fields; set: (k: keyof Fields, v: string | boolean) => void }) {
+  const modeMeta = TRANSFER_MODE_META[f.transferMode] ?? TRANSFER_MODE_META.car;
   return (
     <>
       <Row cols="grid-cols-1">
-        <div><Label>Pickup location</Label><TI value={f.pickupLocation} onChange={v => set('pickupLocation', v)} placeholder="CDG Airport T2" /></div>
+        <div>
+          <Label>Mode</Label>
+          <select
+            value={f.transferMode}
+            onChange={e => set('transferMode', e.target.value)}
+            className="w-full px-2 py-[5px] border border-glacier rounded-sm text-[11px] text-ink font-sans bg-white outline-none cursor-pointer"
+          >
+            {Object.entries(TRANSFER_MODE_META).map(([key, meta]) => (
+              <option key={key} value={key}>{meta.label}</option>
+            ))}
+          </select>
+        </div>
       </Row>
       <Row cols="grid-cols-1">
-        <div><Label>Dropoff location</Label><TI value={f.dropoffLocation} onChange={v => set('dropoffLocation', v)} placeholder="Le Meurice Hotel" /></div>
+        <div><Label>From</Label><TI value={f.pickupLocation} onChange={v => set('pickupLocation', v)} placeholder="CDG Airport T2" /></div>
+      </Row>
+      <Row cols="grid-cols-1">
+        <div><Label>To</Label><TI value={f.dropoffLocation} onChange={v => set('dropoffLocation', v)} placeholder="Le Meurice Hotel" /></div>
       </Row>
       <Row>
-        <div><Label>Vehicle type</Label><TI value={f.vehicleType} onChange={v => set('vehicleType', v)} placeholder="Mercedes S-Class" /></div>
+        <div><Label>{modeMeta.detailLabel}</Label><TI value={f.vehicleType} onChange={v => set('vehicleType', v)} placeholder={modeMeta.detailPlaceholder} /></div>
         <div><Label>Date & time</Label><DTI value={f.transferDateTime} onChange={v => set('transferDateTime', v)} /></div>
       </Row>
       <Row>
@@ -390,7 +427,7 @@ export function LineItemCard({ item, defaultOpen = false, onUpdate, onDelete }: 
           style={{ transform: expanded ? 'rotate(90deg)' : 'none' }}
         />
         <span className="flex items-center gap-1 text-ink-mute flex-shrink-0">
-          {TYPE_ICONS[item.type]}
+          {getItemIcon(item)}
           <span className="text-[10px] font-sans font-semibold tracking-[0.08em] uppercase">{TYPE_LABELS[item.type]}</span>
         </span>
         <span className="text-glacier text-xs mx-0.5">·</span>

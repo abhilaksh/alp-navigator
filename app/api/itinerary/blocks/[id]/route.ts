@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
-import { itineraryBlocks, itineraryDays } from '@/lib/db/schema';
+import { itineraryBlocks, itineraryDays, ITINERARY_BLOCK_TYPES } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getUser } from '@/lib/db/queries';
 
@@ -32,7 +32,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const patch: Partial<typeof itineraryBlocks.$inferInsert> = {};
   if ('content' in body)   patch.content = body.content ?? null;
   if ('sortOrder' in body) patch.sortOrder = body.sortOrder;
-  if ('type' in body)      patch.type = body.type;
+  if ('type' in body) {
+    if (!ITINERARY_BLOCK_TYPES.includes(body.type)) {
+      return NextResponse.json({ error: `Invalid block type: ${body.type}` }, { status: 400 });
+    }
+    patch.type = body.type;
+  }
   if ('itemId' in body)    patch.itemId = body.itemId ?? null;
 
   if (Object.keys(patch).length === 0) {

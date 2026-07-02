@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import {
   Plus, Trash2, MapPin, Car, Utensils, Lightbulb,
   Building2, FileText, Calendar, Map, Sparkles, MessageCircle, Loader2, Copy, Check,
+  Image as ImageIcon, Video, Paperclip, Upload, Search, X,
 } from 'lucide-react';
 import type { DestinationState } from '@/app/(dashboard)/trips/[id]/types';
 import { isHotelItem } from '@/app/(dashboard)/trips/[id]/editor-utils';
@@ -39,6 +40,9 @@ const BLOCK_TYPES = [
   { key: 'transport_note', label: 'Transfer',   Icon: Car,       color: '#4A514B' },
   { key: 'hotel_ref',      label: 'Hotel',      Icon: Building2, color: '#1E3A2F' },
   { key: 'map_pin',        label: 'Map pin',    Icon: MapPin,    color: '#4A514B' },
+  { key: 'image',          label: 'Photo',      Icon: ImageIcon, color: '#A98B52' },
+  { key: 'video',          label: 'Video',      Icon: Video,     color: '#4A514B' },
+  { key: 'pdf',            label: 'Document',   Icon: Paperclip, color: '#4A514B' },
 ] as const;
 
 type BlockTypeKey = typeof BLOCK_TYPES[number]['key'];
@@ -53,10 +57,95 @@ function formatDate(d: string) {
   } catch { return d; }
 }
 
+function parseMediaContent(content: string | null): Record<string, string | undefined> {
+  if (!content) return {};
+  try { return JSON.parse(content); } catch { return {}; }
+}
+
+function parseVideoUrl(url: string): { provider: 'youtube' | 'vimeo' | 'file'; embedUrl?: string } {
+  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  if (yt) return { provider: 'youtube', embedUrl: `https://www.youtube.com/embed/${yt[1]}` };
+  const vm = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  if (vm) return { provider: 'vimeo', embedUrl: `https://player.vimeo.com/video/${vm[1]}` };
+  return { provider: 'file' };
+}
+
 function BlockIcon({ type, size = 13 }: { type: string; size?: number }) {
   const meta = BLOCK_TYPES.find(b => b.key === type);
   if (!meta) return <FileText size={size} style={{ color: '#4A514B' }} />;
   return <meta.Icon size={size} style={{ color: meta.color }} />;
+}
+
+/* ─── Media block card (image / video / pdf) ─────────────────────────────────── */
+
+function MediaBlockCard({
+  block, onSave, onDelete,
+}: {
+  block: ItineraryBlock;
+  onSave: (id: number, content: string) => void;
+  onDelete: (id: number) => void;
+}) {
+  const data = parseMediaContent(block.content);
+  const [caption, setCaption] = useState(data.caption ?? '');
+
+  function saveCaption() {
+    onSave(block.id, JSON.stringify({ ...data, caption }));
+  }
+
+  return (
+    <div className="rounded-[4px] overflow-hidden group relative" style={{ border: '1px solid rgba(22,26,23,0.09)', background: 'white' }}>
+      <button
+        onClick={() => onDelete(block.id)}
+        className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity text-white rounded-full p-1 cursor-pointer"
+        style={{ background: 'rgba(0,0,0,0.45)', border: 'none' }}
+      >
+        <Trash2 size={12} />
+      </button>
+
+      {block.type === 'image' && data.url && (
+        <img src={data.url} alt={caption || ''} className="w-full max-h-[360px] object-cover" />
+      )}
+
+      {block.type === 'video' && data.url && (
+        data.provider === 'youtube' || data.provider === 'vimeo' ? (
+          <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
+            <iframe
+              src={data.embedUrl}
+              className="absolute inset-0 w-full h-full"
+              style={{ border: 'none' }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : (
+          <video src={data.url} controls className="w-full max-h-[360px]" />
+        )
+      )}
+
+      {block.type === 'pdf' && data.url && (
+        <a
+          href={data.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2.5 px-3 py-3 hover:bg-paper transition-colors"
+        >
+          <Paperclip size={16} style={{ color: '#4A514B' }} />
+          <span className="font-sans text-[13px] text-ink truncate flex-1">{data.fileName ?? 'Document.pdf'}</span>
+          <span className="font-mono text-[10px] text-ink-mute uppercase tracking-[0.06em]">Open</span>
+        </a>
+      )}
+
+      <input
+        type="text"
+        value={caption}
+        onChange={e => setCaption(e.target.value)}
+        onBlur={saveCaption}
+        placeholder="Add a caption…"
+        className="w-full px-3 py-2 font-sans text-[11px] text-ink-soft bg-transparent outline-none border-none"
+        style={{ borderTop: '1px solid rgba(22,26,23,0.06)' }}
+      />
+    </div>
+  );
 }
 
 /* ─── Block card ─────────────────────────────────────────────────────────────── */
@@ -105,6 +194,11 @@ function BlockCard({
         </button>
       </div>
     );
+  }
+
+  // Image / video / pdf blocks render their own media card, not the generic text editor
+  if (block.type === 'image' || block.type === 'video' || block.type === 'pdf') {
+    return <MediaBlockCard block={block} onSave={onSave} onDelete={onDelete} />;
   }
 
   if (editing) {
@@ -160,15 +254,229 @@ function BlockCard({
   );
 }
 
+/* ─── Add-media popovers ─────────────────────────────────────────────────────── */
+
+function ImageBlockPopover({ onAdd, onClose }: { onAdd: (content: string) => void; onClose: () => void }) {
+  const [query, setQuery] = useState('');
+  const [photos, setPhotos] = useState<{ id: number; url: string; thumb: string; alt: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [pasteUrl, setPasteUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function search() {
+    if (!query.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/photos?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      setPhotos(data.photos ?? []);
+    } finally { setLoading(false); }
+  }
+
+  function pick(url: string) {
+    onAdd(JSON.stringify({ url }));
+    onClose();
+  }
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.set('file', file);
+      const res = await fetch('/api/uploads', { method: 'POST', body: form });
+      const data = await res.json();
+      if (res.ok && data.url) pick(data.url);
+    } finally { setUploading(false); }
+  }
+
+  return (
+    <div
+      className="absolute left-0 top-full mt-1 bg-white rounded-[4px] z-50 p-3"
+      style={{ border: '1px solid rgba(22,26,23,0.12)', boxShadow: '0 4px 14px rgba(22,26,23,0.1)', width: 320 }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-mute">Add a photo</p>
+        <button onClick={onClose} className="text-ink-mute hover:text-ink cursor-pointer" style={{ background: 'none', border: 'none' }}>
+          <X size={12} />
+        </button>
+      </div>
+
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleUpload} className="hidden" />
+      <button
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        className="w-full flex items-center justify-center gap-1.5 text-[11px] text-ink py-2 rounded-[3px] cursor-pointer mb-2 disabled:opacity-50"
+        style={{ border: '1px dashed rgba(22,26,23,0.2)', background: 'transparent' }}
+      >
+        {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+        {uploading ? 'Uploading…' : 'Upload your own'}
+      </button>
+
+      <div className="flex gap-1.5 mb-2">
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') search(); }}
+          placeholder="Search Pexels…"
+          className="flex-1 px-2 py-[6px] border border-glacier rounded-sm text-[11px] text-ink font-sans bg-white outline-none"
+        />
+        <button
+          onClick={search}
+          disabled={loading}
+          className="px-2.5 rounded-sm text-white cursor-pointer disabled:opacity-50"
+          style={{ background: '#1E3A2F', border: 'none' }}
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+        </button>
+      </div>
+
+      {photos.length > 0 && (
+        <div className="grid grid-cols-3 gap-1.5 mb-2 max-h-[160px] overflow-y-auto">
+          {photos.map(p => (
+            <button
+              key={p.id}
+              onClick={() => pick(p.url)}
+              className="rounded-[3px] overflow-hidden aspect-video cursor-pointer"
+              style={{ border: 'none', padding: 0 }}
+            >
+              <img src={p.thumb} alt={p.alt} className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-1.5">
+        <input
+          type="url"
+          value={pasteUrl}
+          onChange={e => setPasteUrl(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && pasteUrl.trim()) pick(pasteUrl.trim()); }}
+          placeholder="…or paste an image URL"
+          className="flex-1 px-2 py-[6px] border border-glacier rounded-sm text-[11px] text-ink font-sans bg-white outline-none"
+        />
+        <button
+          onClick={() => pasteUrl.trim() && pick(pasteUrl.trim())}
+          disabled={!pasteUrl.trim()}
+          className="px-2.5 rounded-sm text-[11px] cursor-pointer disabled:opacity-40"
+          style={{ background: '#EDEAE1', color: '#1E3A2F', border: 'none' }}
+        >
+          Use
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VideoBlockPopover({ onAdd, onClose }: { onAdd: (content: string) => void; onClose: () => void }) {
+  const [url, setUrl] = useState('');
+
+  function submit() {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const parsed = parseVideoUrl(trimmed);
+    onAdd(JSON.stringify({ url: trimmed, provider: parsed.provider, embedUrl: parsed.embedUrl }));
+    onClose();
+  }
+
+  return (
+    <div
+      className="absolute left-0 top-full mt-1 bg-white rounded-[4px] z-50 p-3"
+      style={{ border: '1px solid rgba(22,26,23,0.12)', boxShadow: '0 4px 14px rgba(22,26,23,0.1)', width: 280 }}
+    >
+      <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-mute mb-2">Embed a video</p>
+      <input
+        type="url"
+        value={url}
+        onChange={e => setUrl(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+        placeholder="Paste a YouTube, Vimeo, or video file URL"
+        autoFocus
+        className="w-full px-2 py-[6px] border border-glacier rounded-sm text-[11px] text-ink font-sans bg-white outline-none mb-2"
+      />
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} className="text-[11px] text-ink-mute hover:text-ink px-2 py-1 cursor-pointer" style={{ background: 'none', border: 'none' }}>
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={!url.trim()}
+          className="text-[11px] text-white bg-spruce px-3 py-1 rounded-[3px] cursor-pointer disabled:opacity-50"
+          style={{ border: 'none' }}
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PdfBlockPopover({ onAdd, onClose }: { onAdd: (content: string) => void; onClose: () => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set('file', file);
+      const res = await fetch('/api/uploads', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Upload failed'); return; }
+      onAdd(JSON.stringify({ url: data.url, fileName: data.fileName }));
+      onClose();
+    } catch {
+      setError('Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div
+      className="absolute left-0 top-full mt-1 bg-white rounded-[4px] z-50 p-3"
+      style={{ border: '1px solid rgba(22,26,23,0.12)', boxShadow: '0 4px 14px rgba(22,26,23,0.1)', width: 260 }}
+    >
+      <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-mute mb-2">Upload a PDF</p>
+      <input ref={fileRef} type="file" accept="application/pdf" onChange={handleFile} className="hidden" />
+      <button
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        className="w-full flex items-center justify-center gap-1.5 text-[11px] text-ink py-2 rounded-[3px] cursor-pointer disabled:opacity-50"
+        style={{ border: '1px dashed rgba(22,26,23,0.2)', background: 'transparent' }}
+      >
+        {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+        {uploading ? 'Uploading…' : 'Choose PDF file'}
+      </button>
+      {error && <p className="text-[10px] text-danger mt-1.5">{error}</p>}
+      <button
+        onClick={onClose}
+        className="w-full text-[11px] text-ink-mute hover:text-ink py-1.5 mt-1 cursor-pointer"
+        style={{ background: 'none', border: 'none' }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 /* ─── Day panel ─────────────────────────────────────────────────────────────── */
 
 function DayPanel({
-  day, destinations, onUpdateDay, onAddBlock, onUpdateBlock, onDeleteBlock, onDeleteDay,
+  day, destinations, onUpdateDay, onAddBlock, onAddMediaBlock, onUpdateBlock, onDeleteBlock, onDeleteDay,
 }: {
   day: ItineraryDay;
   destinations: DestinationState[];
   onUpdateDay: (id: number, patch: Partial<ItineraryDay>) => void;
   onAddBlock: (dayId: number, type: BlockTypeKey) => void;
+  onAddMediaBlock: (dayId: number, type: 'image' | 'video' | 'pdf', content: string) => void;
   onUpdateBlock: (id: number, content: string) => void;
   onDeleteBlock: (id: number) => void;
   onDeleteDay: (id: number) => void;
@@ -189,6 +497,9 @@ function DayPanel({
   );
 
   const [showHotelPicker, setShowHotelPicker] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showVideoPicker, setShowVideoPicker] = useState(false);
+  const [showPdfPicker, setShowPdfPicker] = useState(false);
 
   const destName = day.destinationId
     ? destinations.find(d => d.id === day.destinationId)?.name
@@ -330,7 +641,7 @@ function DayPanel({
 
         {/* Add block row */}
         <div className="flex items-center gap-2 flex-wrap">
-          {BLOCK_TYPES.filter(b => b.key !== 'hotel_ref').map(({ key, label, Icon, color }) => (
+          {BLOCK_TYPES.filter(b => !['hotel_ref', 'image', 'video', 'pdf'].includes(b.key)).map(({ key, label, Icon, color }) => (
             <button
               key={key}
               onClick={() => onAddBlock(day.id, key as BlockTypeKey)}
@@ -346,6 +657,57 @@ function DayPanel({
               <Icon size={11} style={{ color }} /> {label}
             </button>
           ))}
+
+          {/* Photo */}
+          <div className="relative">
+            <button
+              onClick={() => setShowImagePicker(v => !v)}
+              className="inline-flex items-center gap-1.5 font-sans text-[11px] px-2.5 py-[5px] rounded-[3px] cursor-pointer transition-colors"
+              style={{ background: 'rgba(169,139,82,0.06)', border: '1px solid rgba(169,139,82,0.16)', color: '#A98B52' }}
+            >
+              <ImageIcon size={11} /> Photo
+            </button>
+            {showImagePicker && (
+              <ImageBlockPopover
+                onAdd={content => onAddMediaBlock(day.id, 'image', content)}
+                onClose={() => setShowImagePicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Video */}
+          <div className="relative">
+            <button
+              onClick={() => setShowVideoPicker(v => !v)}
+              className="inline-flex items-center gap-1.5 font-sans text-[11px] px-2.5 py-[5px] rounded-[3px] cursor-pointer transition-colors"
+              style={{ background: 'rgba(22,26,23,0.04)', border: '1px solid rgba(22,26,23,0.1)', color: '#4A514B' }}
+            >
+              <Video size={11} /> Video
+            </button>
+            {showVideoPicker && (
+              <VideoBlockPopover
+                onAdd={content => onAddMediaBlock(day.id, 'video', content)}
+                onClose={() => setShowVideoPicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Document (PDF) */}
+          <div className="relative">
+            <button
+              onClick={() => setShowPdfPicker(v => !v)}
+              className="inline-flex items-center gap-1.5 font-sans text-[11px] px-2.5 py-[5px] rounded-[3px] cursor-pointer transition-colors"
+              style={{ background: 'rgba(22,26,23,0.04)', border: '1px solid rgba(22,26,23,0.1)', color: '#4A514B' }}
+            >
+              <Paperclip size={11} /> Document
+            </button>
+            {showPdfPicker && (
+              <PdfBlockPopover
+                onAdd={content => onAddMediaBlock(day.id, 'pdf', content)}
+                onClose={() => setShowPdfPicker(false)}
+              />
+            )}
+          </div>
 
           {/* Hotel ref — only if hotels exist */}
           {hotelItems.length > 0 && (
@@ -522,6 +884,22 @@ export function ItineraryBuilder({ tripId, destinations }: ItineraryBuilderProps
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dayId, type, sortOrder: day?.blocks.length ?? 0 }),
+    });
+    if (res.ok) {
+      const newBlock: ItineraryBlock = await res.json();
+      mutate(
+        prev => prev?.map(d => d.id === dayId ? { ...d, blocks: [...d.blocks, newBlock] } : d),
+        { revalidate: false },
+      );
+    }
+  }, [sortedDays, mutate]);
+
+  const handleAddMediaBlock = useCallback(async (dayId: number, type: 'image' | 'video' | 'pdf', content: string) => {
+    const day = sortedDays.find(d => d.id === dayId);
+    const res = await fetch('/api/itinerary/blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dayId, type, content, sortOrder: day?.blocks.length ?? 0 }),
     });
     if (res.ok) {
       const newBlock: ItineraryBlock = await res.json();
@@ -760,6 +1138,7 @@ export function ItineraryBuilder({ tripId, destinations }: ItineraryBuilderProps
           destinations={destinations}
           onUpdateDay={handleUpdateDay}
           onAddBlock={handleAddBlock}
+          onAddMediaBlock={handleAddMediaBlock}
           onUpdateBlock={handleUpdateBlock}
           onDeleteBlock={handleDeleteBlock}
           onDeleteDay={handleDeleteDay}
