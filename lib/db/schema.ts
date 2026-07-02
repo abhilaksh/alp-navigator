@@ -237,6 +237,31 @@ export const rates = mysqlTable('rates', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ─── Item Rates ───────────────────────────────────────────────────────────────
+// Same "multiple quoted options, AI-parsed, compare and pick one" pattern as
+// `rates`, but keyed directly to trip_items so it works for flights, transfers,
+// and activities too (which have no hotel_details-style sub-table). Hotels keep
+// using `rates` unchanged -- this table is additive, not a replacement.
+
+export const itemRates = mysqlTable('item_rates', {
+  id: int('id').autoincrement().primaryKey(),
+  itemId: int('item_id').notNull().references(() => tripItems.id, { onDelete: 'cascade' }),
+  source: varchar('source', { length: 30 }),
+  sourceLabel: varchar('source_label', { length: 100 }),
+  rawText: text('raw_text'),
+  status: varchar('status', { length: 20 }).notNull().default('idle'),
+  // 'idle' | 'parsing' | 'done' | 'error' | 'proposals'
+  isConfirmed: int('is_confirmed').notNull().default(0),  // 1 = this is the booked option
+  parsedData: text('parsed_data'),          // JSON: ParsedItemRate
+  proposals: text('proposals'),             // JSON: ParsedItemRate[]
+  errorMessage: text('error_message'),
+  history: text('history'),                 // JSON: [{parsed, rawText, timestamp}]
+  expiresAt: date('expires_at'),
+  sortOrder: int('sort_order').notNull().default(0),
+  addedAt: timestamp('added_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
 // ─── Trip Snapshots (proposal version history) ────────────────────────────────
 // Immutable snapshots taken before each edit to a sent/accepted/booked proposal.
 // The current live state is always in trips + destinations + trip_items + rates.
@@ -287,15 +312,16 @@ export const itineraryBlocks = mysqlTable('itinerary_blocks', {
   id: int('id').autoincrement().primaryKey(),
   dayId: int('day_id').notNull().references(() => itineraryDays.id, { onDelete: 'cascade' }),
   type: varchar('type', { length: 30 }).notNull(),
-  // 'text' | 'tip' | 'meal' | 'transport_note' | 'hotel_ref' | 'map_pin' |
-  // 'image' | 'video' | 'pdf'
+  // 'text' | 'tip' | 'meal' | 'transport_note' | 'hotel_ref' | 'flight_ref' |
+  // 'transfer_ref' | 'activity_ref' | 'map_pin' | 'image' | 'video' | 'pdf'
   content: text('content'),                 // rich text, or JSON for image/video/pdf
   itemId: int('item_id').references(() => tripItems.id), // optional link to a trip_item
   sortOrder: int('sort_order').notNull().default(0),
 });
 
 export const ITINERARY_BLOCK_TYPES = [
-  'text', 'tip', 'meal', 'transport_note', 'hotel_ref', 'map_pin', 'image', 'video', 'pdf',
+  'text', 'tip', 'meal', 'transport_note', 'hotel_ref', 'flight_ref', 'transfer_ref', 'activity_ref',
+  'map_pin', 'image', 'video', 'pdf',
 ] as const;
 
 // ─── Relations ────────────────────────────────────────────────────────────────
@@ -364,6 +390,7 @@ export const tripItemsRelations = relations(tripItems, ({ one, many }) => ({
   destination: one(destinations, { fields: [tripItems.destinationId], references: [destinations.id] }),
   hotelDetails: one(hotelDetails, { fields: [tripItems.id], references: [hotelDetails.itemId] }),
   itineraryBlocks: many(itineraryBlocks),
+  itemRates: many(itemRates),
 }));
 
 export const hotelDetailsRelations = relations(hotelDetails, ({ one, many }) => ({
@@ -373,6 +400,10 @@ export const hotelDetailsRelations = relations(hotelDetails, ({ one, many }) => 
 
 export const ratesRelations = relations(rates, ({ one }) => ({
   hotelDetail: one(hotelDetails, { fields: [rates.hotelDetailId], references: [hotelDetails.id] }),
+}));
+
+export const itemRatesRelations = relations(itemRates, ({ one }) => ({
+  item: one(tripItems, { fields: [itemRates.itemId], references: [tripItems.id] }),
 }));
 
 export const itineraryDaysRelations = relations(itineraryDays, ({ one, many }) => ({
@@ -515,4 +546,52 @@ export type ParsedRate = {
   vet_notes?: string;
   date_mismatch?: boolean;
   date_mismatch_note?: string;
+};
+
+export type ParsedItemRate = {
+  // common
+  total_inr?: number;
+  taxes_inr?: number;
+  cancellation_free?: boolean;
+  cancellation_deadline?: string;
+  cancellation_note?: string;
+  date_mismatch?: boolean;
+  date_mismatch_note?: string;
+  // flight
+  airline?: string;
+  flight_number?: string;
+  cabin_class?: string;
+  fare_class?: 'refundable' | 'non_refundable';
+  from?: string;
+  to?: string;
+  departure_datetime?: string;
+  arrival_datetime?: string;
+  baggage_checked?: string;
+  baggage_cabin?: string;
+  change_fee_inr?: number;
+  pnr?: string;
+  fare_adult_inr?: number;
+  fare_teen_inr?: number;
+  fare_child_inr?: number;
+  fare_infant_inr?: number;
+  adult_count?: number;
+  teen_count?: number;
+  child_count?: number;
+  infant_count?: number;
+  // transfer
+  mode?: 'car' | 'train' | 'ferry' | 'bus' | 'other';
+  vehicle_or_class?: string;
+  operator?: string;
+  pickup?: string;
+  dropoff?: string;
+  transfer_datetime?: string;
+  is_per_vehicle?: boolean;
+  // activity
+  option_name?: string;
+  activity_datetime?: string;
+  duration?: string;
+  inclusions?: string[];
+  payment_due_date?: string;
+  is_per_person?: boolean;
+  pax_count?: number;
 };

@@ -266,6 +266,9 @@ export async function getTripById(id: number) {
                   },
                 },
               },
+              itemRates: {
+                orderBy: (r, { asc }) => [asc(r.sortOrder)],
+              },
             },
           },
         },

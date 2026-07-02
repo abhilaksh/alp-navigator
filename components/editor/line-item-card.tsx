@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Plane, Car, Ticket, Star, ChevronRight, X, Check, TrainFront, Ship, Bus } from 'lucide-react';
+import { ItemRateCard, type ItemRateState } from './item-rate-card';
+import type { ParsedItemRate } from '@/lib/db/schema';
 
 export type LineItemType = 'flight' | 'transfer' | 'activity' | 'experience';
 
@@ -18,6 +20,7 @@ export interface LineItemState {
   visaRequired: number;
   detailsJson: Record<string, unknown> | null;
   sortOrder: number;
+  itemRates: ItemRateState[];
 }
 
 interface LineItemCardProps {
@@ -30,6 +33,12 @@ interface LineItemCardProps {
     cancellationFreeUntil?: string | null; visaRequired?: number;
   }) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  onAddRate: (itemId: number) => Promise<void>;
+  onRemoveRate: (rateId: number) => void;
+  onParseRate: (rateId: number, rawText: string) => Promise<void>;
+  onRateSourceChange: (rateId: number, source: string) => void;
+  onSelectRateProposal: (rateId: number, proposal: ParsedItemRate) => void;
+  onRateExpiryChange: (rateId: number, expiresAt: string | null) => void;
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -378,7 +387,10 @@ function ActivityForm({ f, set }: { f: Fields; set: (k: keyof Fields, v: string 
 }
 
 /* ─── Main card ───────────────────────────────────────────────────────────── */
-export function LineItemCard({ item, defaultOpen = false, onUpdate, onDelete }: LineItemCardProps) {
+export function LineItemCard({
+  item, defaultOpen = false, onUpdate, onDelete,
+  onAddRate, onRemoveRate, onParseRate, onRateSourceChange, onSelectRateProposal, onRateExpiryChange,
+}: LineItemCardProps) {
   const [expanded, setExpanded] = useState(defaultOpen);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState(() => initFields(item));
@@ -483,6 +495,31 @@ export function LineItemCard({ item, defaultOpen = false, onUpdate, onDelete }: 
           {item.type === 'flight'   && <FlightForm f={f} set={set} />}
           {item.type === 'transfer' && <TransferForm f={f} set={set} />}
           {(item.type === 'activity' || item.type === 'experience') && <ActivityForm f={f} set={set} />}
+
+          {/* Rates — multiple quoted options, AI-parsed, compare and pick one */}
+          <div className="mt-3 pt-2.5" style={{ borderTop: '1px solid rgba(22,26,23,0.07)' }}>
+            <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute mb-1.5">Rates</p>
+            {item.itemRates.map((rate, i) => (
+              <ItemRateCard
+                key={rate.id}
+                rate={rate}
+                index={i}
+                itemType={item.type}
+                onRemove={onRemoveRate}
+                onParse={onParseRate}
+                onSourceChange={onRateSourceChange}
+                onSelectProposal={onSelectRateProposal}
+                onExpiryChange={onRateExpiryChange}
+              />
+            ))}
+            <button
+              onClick={() => onAddRate(item.id)}
+              className="flex items-center gap-[5px] w-full px-[10px] py-[6px] text-[11px] text-ink-mute bg-none border border-dashed border-glacier rounded-sm cursor-pointer hover:text-brass hover:border-brass transition-colors"
+              style={{ background: 'none' }}
+            >
+              + Add another rate
+            </button>
+          </div>
 
           {/* Booking fields: cancel deadline + visa */}
           <div className="mt-3 pt-2.5 flex items-end gap-3 flex-wrap" style={{ borderTop: '1px solid rgba(22,26,23,0.07)' }}>

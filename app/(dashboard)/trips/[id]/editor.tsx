@@ -7,9 +7,9 @@ import { Topbar, type SaveStatus, type WorkflowStatus, type IntakeStatus } from 
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
 import { LineItemCard, type LineItemState } from '@/components/editor/line-item-card';
 import { SearchPanel, type SearchResult } from '@/components/editor/search-panel';
-import type { ParsedRate } from '@/lib/db/schema';
+import type { ParsedRate, ParsedItemRate } from '@/lib/db/schema';
 import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
-import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, isHotelItem } from './editor-utils';
+import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, updateItemRate, isHotelItem } from './editor-utils';
 import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
 import { BookingsPanel } from '@/components/editor/bookings-panel';
 import { ChecklistPanel } from '@/components/editor/checklist-panel';
@@ -838,6 +838,84 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }).catch(() => {});
   }
 
+  // ─── Item rate mutations (flights/transfers/activities) ─────────────────────
+  async function handleAddItemRate(itemId: number) {
+    const res = await fetch('/api/item-rates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId, source: 'direct' }),
+    });
+    if (res.ok) {
+      const rate = await res.json();
+      setDests(prev => prev.map(d => ({
+        ...d,
+        items: d.items.map(i => (!isHotelItem(i) && i.id === itemId)
+          ? { ...i, itemRates: [...i.itemRates, rate] }
+          : i),
+      })));
+    }
+  }
+
+  async function handleRemoveItemRate(rateId: number) {
+    await fetch(`/api/item-rates/${rateId}`, { method: 'DELETE' }).catch(() => {});
+    setDests(prev => prev.map(d => ({
+      ...d,
+      items: d.items.map(i => isHotelItem(i) ? i : { ...i, itemRates: i.itemRates.filter(r => r.id !== rateId) }),
+    })));
+  }
+
+  async function handleParseItemRate(rateId: number, rawText: string) {
+    setDests(prev => updateItemRate(prev, rateId, r => ({ ...r, status: 'parsing', rawText })));
+    try {
+      const res = await fetch(`/api/item-rates/${rateId}/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawText }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setDests(prev => updateItemRate(prev, rateId, () => updated));
+      } else {
+        const { error } = await res.json().catch(() => ({ error: 'Parse failed' }));
+        setDests(prev => updateItemRate(prev, rateId, r => ({ ...r, status: 'error', errorMessage: error })));
+      }
+    } catch {
+      setDests(prev => updateItemRate(prev, rateId, r => ({ ...r, status: 'error', errorMessage: 'Network error' })));
+    }
+  }
+
+  function handleItemRateSourceChange(rateId: number, source: string) {
+    setDests(prev => updateItemRate(prev, rateId, r => ({ ...r, source })));
+    fetch(`/api/item-rates/${rateId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source }),
+    }).catch(() => {});
+  }
+
+  function handleItemRateExpiryChange(rateId: number, expiresAt: string | null) {
+    setDests(prev => updateItemRate(prev, rateId, r => ({ ...r, expiresAt: expiresAt ?? null })));
+    fetch(`/api/item-rates/${rateId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresAt }),
+    }).catch(() => {});
+  }
+
+  function handleSelectItemRateProposal(rateId: number, proposal: ParsedItemRate) {
+    setDests(prev => updateItemRate(prev, rateId, r => ({
+      ...r,
+      status: 'done',
+      parsedData: JSON.stringify(proposal),
+      proposals: null,
+    })));
+    fetch(`/api/item-rates/${rateId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'done', parsedData: JSON.stringify(proposal), proposals: null }),
+    }).catch(() => {});
+  }
+
   // ─── Line item mutations ─────────────────────────────────────────────────────
   async function handleAddLineItem(type: LineItemState['type']) {
     if (!activeDestId) return;
@@ -854,6 +932,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         confirmedTotalInr: null, startDate: null, endDate: null,
         cancellationFreeUntil: null, visaRequired: 0,
         detailsJson: null, sortOrder: (activeDest?.items.length ?? 0),
+        itemRates: [],
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
       setNewItemIds(prev => new Set(prev).add(data.id));
@@ -1580,6 +1659,12 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                       defaultOpen={newItemIds.has(item.id)}
                       onUpdate={handleUpdateLineItem}
                       onDelete={handleDeleteLineItem}
+                      onAddRate={handleAddItemRate}
+                      onRemoveRate={handleRemoveItemRate}
+                      onParseRate={handleParseItemRate}
+                      onRateSourceChange={handleItemRateSourceChange}
+                      onSelectRateProposal={handleSelectItemRateProposal}
+                      onRateExpiryChange={handleItemRateExpiryChange}
                     />
                   );
                 })

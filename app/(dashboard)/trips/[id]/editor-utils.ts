@@ -1,5 +1,6 @@
 import type { HotelItemState } from '@/components/editor/hotel-card';
 import type { LineItemState } from '@/components/editor/line-item-card';
+import type { ItemRateState } from '@/components/editor/item-rate-card';
 import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
 
 export function isHotelItem(item: HotelItemState | LineItemState): item is HotelItemState {
@@ -64,6 +65,13 @@ export function mapDestinations(raw: TripFull['destinations']): DestinationState
           ? (() => { try { return JSON.parse(i.detailsJson!); } catch { return null; } })()
           : null,
         sortOrder: i.sortOrder,
+        itemRates: ((i as { itemRates?: ItemRateState[] }).itemRates ?? []).map(r => ({
+          ...r,
+          sourceLabel: r.sourceLabel ?? null,
+          history: r.history ?? null,
+          updatedAt: r.updatedAt ?? null,
+          expiresAt: (r as { expiresAt?: string | null }).expiresAt ?? null,
+        })) as ItemRateState[],
       } as LineItemState;
     }),
   }));
@@ -109,6 +117,20 @@ export function updateRate(
     items: d.items.map(i => {
       if (!isHotelItem(i) || !i.hotelDetails) return i;
       return { ...i, hotelDetails: { ...i.hotelDetails, rates: i.hotelDetails.rates.map(r => r.id === rateId ? fn(r) : r) } };
+    }),
+  }));
+}
+
+export function updateItemRate(
+  prev: DestinationState[],
+  rateId: number,
+  fn: (r: ItemRateState) => ItemRateState,
+): DestinationState[] {
+  return prev.map(d => ({
+    ...d,
+    items: d.items.map(i => {
+      if (isHotelItem(i)) return i;
+      return { ...i, itemRates: i.itemRates.map(r => r.id === rateId ? fn(r) : r) };
     }),
   }));
 }

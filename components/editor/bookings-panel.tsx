@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { Building2, Plane, Car, Ticket, Star, TrainFront, Ship, Bus } from 'lucide-react';
 import type { DestinationState } from '@/app/(dashboard)/trips/[id]/types';
 import type { HotelItemState } from './hotel-card';
+import type { LineItemState } from './line-item-card';
 import { isHotelItem } from '@/app/(dashboard)/trips/[id]/editor-utils';
 import { ConfirmationParser } from './confirmation-parser';
 
 type BookingStatus = 'researching' | 'quoted' | 'confirmed' | 'cancelled';
+type BookableItem = HotelItemState | LineItemState;
 
 const STATUS_CYCLE: BookingStatus[] = ['researching', 'quoted', 'confirmed', 'cancelled'];
 
@@ -22,6 +25,40 @@ function getDaysDiff(dateStr: string | null): number | null {
   const target = new Date(dateStr + 'T23:59:59');
   const now = new Date();
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function itemIcon(item: BookableItem) {
+  if (isHotelItem(item)) return <Building2 size={11} style={{ color: '#1E3A2F' }} />;
+  if (item.type === 'flight') return <Plane size={11} style={{ color: '#4A514B' }} />;
+  if (item.type === 'transfer') {
+    const mode = String(item.detailsJson?.mode ?? 'car');
+    if (mode === 'train') return <TrainFront size={11} style={{ color: '#4A514B' }} />;
+    if (mode === 'ferry') return <Ship size={11} style={{ color: '#4A514B' }} />;
+    if (mode === 'bus') return <Bus size={11} style={{ color: '#4A514B' }} />;
+    return <Car size={11} style={{ color: '#4A514B' }} />;
+  }
+  if (item.type === 'experience') return <Star size={11} style={{ color: '#4A514B' }} />;
+  return <Ticket size={11} style={{ color: '#4A514B' }} />;
+}
+
+function rateList(item: BookableItem): { status: string; parsedData: string | null }[] {
+  return isHotelItem(item) ? (item.hotelDetails?.rates ?? []) : item.itemRates;
+}
+
+function getRateStatus(item: BookableItem): { label: string; color: string; bg: string } | null {
+  const list = rateList(item);
+  if (list.some(r => r.status === 'done')) return { label: 'Rate parsed', color: '#1E3A2F', bg: 'rgba(30,58,47,0.08)' };
+  if (list.length > 0) return { label: `${list.length} rate${list.length > 1 ? 's' : ''}`, color: '#8A9189', bg: 'rgba(22,26,23,0.05)' };
+  return null;
+}
+
+function cheapestTotal(item: BookableItem): number {
+  const list = rateList(item);
+  return list.reduce((min, rate) => {
+    const parsed = rate.parsedData ? (JSON.parse(rate.parsedData) as { total_inr?: number }) : null;
+    const amt = parsed?.total_inr ?? 0;
+    return amt > 0 && amt < min ? amt : min;
+  }, Infinity);
 }
 
 function CancelBadge({ date }: { date: string | null }) {
@@ -63,42 +100,38 @@ interface BookingsPanelProps {
 
 export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange, onBookingConfirmed }: BookingsPanelProps) {
   const [parserOpen, setParserOpen] = useState<{ itemId: number; hotelName: string } | null>(null);
-  // Flatten all hotel items with their destination context
-  const rows: Array<{ dest: DestinationState; hotel: HotelItemState }> = [];
+  // Flatten all bookable items (hotels + flights/transfers/activities) with their destination context
+  const rows: Array<{ dest: DestinationState; item: BookableItem }> = [];
   for (const dest of destinations) {
     for (const item of dest.items) {
-      if (isHotelItem(item)) rows.push({ dest, hotel: item });
+      rows.push({ dest, item });
     }
   }
 
   // Alerts
   const urgentCancels = rows.filter(r => {
-    const days = getDaysDiff(r.hotel.cancellationFreeUntil);
+    const days = getDaysDiff(r.item.cancellationFreeUntil);
     return days !== null && days <= 7;
   });
 
   const expiringHolds = rows.filter(r => {
-    if (!r.hotel.hotelDetails?.holdExpiresAt) return false;
-    const days = getDaysDiff(r.hotel.hotelDetails.holdExpiresAt);
+    if (!isHotelItem(r.item) || !r.item.hotelDetails?.holdExpiresAt) return false;
+    const days = getDaysDiff(r.item.hotelDetails.holdExpiresAt);
     return days !== null && days <= 2;
   });
 
   // Totals
   const confirmedTotal = rows.reduce((sum, r) => {
-    if (r.hotel.bookingStatus !== 'confirmed') return sum;
-    const rates = r.hotel.hotelDetails?.rates ?? [];
-    const cheapest = rates.reduce((min, rate) => {
-      const parsed = rate.parsedData ? (JSON.parse(rate.parsedData) as { total_inr?: number }) : null;
-      const amt = parsed?.total_inr ?? 0;
-      return amt > 0 && amt < min ? amt : min;
-    }, Infinity);
-    return sum + (cheapest < Infinity ? cheapest : 0);
+    if (r.item.bookingStatus !== 'confirmed') return sum;
+    const cheapest = cheapestTotal(r.item);
+    if (cheapest < Infinity) return sum + cheapest;
+    return sum + (isHotelItem(r.item) ? 0 : (r.item.confirmedTotalInr ?? 0));
   }, 0);
 
   if (rows.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-[13px] text-ink-mute font-sans">No hotels added yet.</p>
+        <p className="text-[13px] text-ink-mute font-sans">No hotels, flights, transfers, or activities added yet.</p>
       </div>
     );
   }
@@ -129,14 +162,14 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
           <div className="mb-5 px-4 py-3 rounded-[4px] text-[12px] font-sans"
             style={{ background: 'rgba(217,119,6,0.07)', border: '1px solid rgba(217,119,6,0.25)', color: '#b45309' }}>
             <span className="font-semibold">Free cancellation expiring soon:</span>
-            {' '}{urgentCancels.map(r => r.hotel.title).join(', ')}.
+            {' '}{urgentCancels.map(r => r.item.title).join(', ')}.
           </div>
         )}
         {expiringHolds.length > 0 && (
           <div className="mb-5 px-4 py-3 rounded-[4px] text-[12px] font-sans"
             style={{ background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.22)', color: '#b91c1c' }}>
             <span className="font-semibold">Hold expiring soon:</span>
-            {' '}{expiringHolds.map(r => r.hotel.title).join(', ')}.
+            {' '}{expiringHolds.map(r => r.item.title).join(', ')}.
           </div>
         )}
 
@@ -163,24 +196,20 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
               background: 'rgba(22,26,23,0.02)',
             }}
           >
-            {['Destination', 'Hotel', 'Status', 'Booking ref', 'Deadlines', ''].map(h => (
+            {['Destination', 'Item', 'Status', 'Booking ref', 'Deadlines', ''].map(h => (
               <span key={h} className="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-mute">{h}</span>
             ))}
           </div>
 
           {/* Rows */}
-          {rows.map(({ dest, hotel }, ri) => {
-            const ss = STATUS_STYLE[hotel.bookingStatus as BookingStatus] ?? STATUS_STYLE.researching;
-            const rateStatus = (() => {
-              const rates = hotel.hotelDetails?.rates ?? [];
-              if (rates.some(r => r.status === 'done')) return { label: 'Rate parsed', color: '#1E3A2F', bg: 'rgba(30,58,47,0.08)' };
-              if (rates.length > 0) return { label: `${rates.length} rate${rates.length > 1 ? 's' : ''}`, color: '#8A9189', bg: 'rgba(22,26,23,0.05)' };
-              return null;
-            })();
+          {rows.map(({ dest, item }, ri) => {
+            const ss = STATUS_STYLE[item.bookingStatus as BookingStatus] ?? STATUS_STYLE.researching;
+            const rateStatus = getRateStatus(item);
+            const hotel = isHotelItem(item) ? item : null;
 
             return (
               <div
-                key={hotel.id}
+                key={item.id}
                 className="grid items-start px-4 py-3 group hover:bg-paper transition-colors"
                 style={{
                   gridTemplateColumns: '1fr 2fr 1fr 1fr 1fr auto',
@@ -197,12 +226,15 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
                   )}
                 </div>
 
-                {/* Hotel name + rate badge */}
+                {/* Item name + rate badge */}
                 <div className="flex flex-col gap-1 min-w-0">
-                  <span className="font-display text-[13px] text-ink truncate" style={{ fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}>
-                    {hotel.title}
-                  </span>
-                  {hotel.hotelDetails?.stars && (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="flex-shrink-0">{itemIcon(item)}</span>
+                    <span className="font-display text-[13px] text-ink truncate" style={{ fontFamily: 'Fraunces, Georgia, serif', fontWeight: 300 }}>
+                      {item.title}
+                    </span>
+                  </div>
+                  {hotel?.hotelDetails?.stars && (
                     <span className="text-[9px] text-brass">{'★'.repeat(hotel.hotelDetails.stars)}</span>
                   )}
                   {rateStatus && (
@@ -216,7 +248,7 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
                 {/* Booking status (clickable) */}
                 <div className="flex flex-col gap-1">
                   <button
-                    onClick={() => cycleStatus(hotel.id, hotel.bookingStatus)}
+                    onClick={() => cycleStatus(item.id, item.bookingStatus)}
                     className="text-[9px] font-mono uppercase tracking-[0.06em] px-[6px] py-[3px] rounded-[2px] cursor-pointer transition-opacity hover:opacity-70 w-fit"
                     style={{ background: ss.bg, color: ss.color, border: `1px solid ${ss.border}` }}
                     title="Click to advance status"
@@ -229,11 +261,11 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
                 <div>
                   <input
                     type="text"
-                    defaultValue={(hotel as unknown as { bookingRef?: string | null }).bookingRef ?? ''}
+                    defaultValue={item.bookingRef ?? ''}
                     onBlur={e => {
                       const val = e.currentTarget.value.trim();
-                      if (val !== ((hotel as unknown as { bookingRef?: string | null }).bookingRef ?? '')) {
-                        onBookingRefChange(hotel.id, val);
+                      if (val !== (item.bookingRef ?? '')) {
+                        onBookingRefChange(item.id, val);
                       }
                     }}
                     placeholder="—"
@@ -246,8 +278,8 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
 
                 {/* Deadlines */}
                 <div className="flex flex-col gap-1">
-                  <CancelBadge date={hotel.cancellationFreeUntil} />
-                  {hotel.hotelDetails?.holdExpiresAt && (
+                  <CancelBadge date={item.cancellationFreeUntil} />
+                  {hotel?.hotelDetails?.holdExpiresAt && (
                     <span className="font-mono text-[8px] px-[5px] py-[2px] rounded-[2px]"
                       style={{ background: 'rgba(22,26,23,0.05)', color: '#8A9189' }}>
                       Hold: {hotel.hotelDetails.holdExpiresAt}
@@ -255,16 +287,18 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
                   )}
                 </div>
 
-                {/* Parse confirmation button */}
+                {/* Parse confirmation button — hotels only */}
                 <div className="flex items-start pt-0.5">
-                  <button
-                    onClick={() => setParserOpen({ itemId: hotel.id, hotelName: hotel.title })}
-                    className="font-mono text-[8px] uppercase tracking-[0.06em] px-2 py-[3px] rounded-[2px] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
-                    style={{ background: 'rgba(30,58,47,0.08)', color: '#1E3A2F', border: '1px solid rgba(30,58,47,0.2)' }}
-                    title="Paste confirmation email to extract booking details"
-                  >
-                    ✦ Parse
-                  </button>
+                  {hotel && (
+                    <button
+                      onClick={() => setParserOpen({ itemId: hotel.id, hotelName: hotel.title })}
+                      className="font-mono text-[8px] uppercase tracking-[0.06em] px-2 py-[3px] rounded-[2px] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
+                      style={{ background: 'rgba(30,58,47,0.08)', color: '#1E3A2F', border: '1px solid rgba(30,58,47,0.2)' }}
+                      title="Paste confirmation email to extract booking details"
+                    >
+                      ✦ Parse
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -274,7 +308,7 @@ export function BookingsPanel({ destinations, onStatusChange, onBookingRefChange
         {/* Status summary */}
         <div className="mt-5 flex gap-4 text-[11px] font-sans text-ink-mute">
           {(Object.keys(STATUS_STYLE) as BookingStatus[]).map(s => {
-            const count = rows.filter(r => r.hotel.bookingStatus === s).length;
+            const count = rows.filter(r => r.item.bookingStatus === s).length;
             if (!count) return null;
             const ss = STATUS_STYLE[s];
             return (

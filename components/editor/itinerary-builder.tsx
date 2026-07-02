@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import {
   Plus, Trash2, MapPin, Car, Utensils, Lightbulb,
   Building2, FileText, Calendar, Map, Sparkles, MessageCircle, Loader2, Copy, Check,
-  Image as ImageIcon, Video, Paperclip, Upload, Search, X,
+  Image as ImageIcon, Video, Paperclip, Upload, Search, X, Plane, CarFront, Ticket,
 } from 'lucide-react';
 import type { DestinationState } from '@/app/(dashboard)/trips/[id]/types';
 import { isHotelItem } from '@/app/(dashboard)/trips/[id]/editor-utils';
@@ -39,6 +39,9 @@ const BLOCK_TYPES = [
   { key: 'meal',           label: 'Meal',       Icon: Utensils,  color: '#2E6B45' },
   { key: 'transport_note', label: 'Transfer',   Icon: Car,       color: '#4A514B' },
   { key: 'hotel_ref',      label: 'Hotel',      Icon: Building2, color: '#1E3A2F' },
+  { key: 'flight_ref',     label: 'Flight',     Icon: Plane,     color: '#1E3A2F' },
+  { key: 'transfer_ref',   label: 'Transfer',   Icon: CarFront,  color: '#1E3A2F' },
+  { key: 'activity_ref',   label: 'Activity',   Icon: Ticket,    color: '#1E3A2F' },
   { key: 'map_pin',        label: 'Map pin',    Icon: MapPin,    color: '#4A514B' },
   { key: 'image',          label: 'Photo',      Icon: ImageIcon, color: '#A98B52' },
   { key: 'video',          label: 'Video',      Icon: Video,     color: '#4A514B' },
@@ -172,18 +175,19 @@ function BlockCard({
 
   const meta = BLOCK_TYPES.find(b => b.key === block.type);
 
-  // For hotel_ref, find the hotel name
-  if (block.type === 'hotel_ref') {
-    const allHotels = destinations.flatMap(d => d.items.filter(i => isHotelItem(i)));
-    const linked = block.itemId ? allHotels.find(i => i.id === block.itemId) : null;
+  // For hotel_ref / flight_ref / transfer_ref / activity_ref, find the linked item
+  if (block.type === 'hotel_ref' || block.type === 'flight_ref' || block.type === 'transfer_ref' || block.type === 'activity_ref') {
+    const allItems = destinations.flatMap(d => d.items);
+    const linked = block.itemId ? allItems.find(i => i.id === block.itemId) : null;
+    const RefIcon = BLOCK_TYPES.find(b => b.key === block.type)?.Icon ?? Building2;
     return (
       <div
         className="flex items-center gap-2.5 px-3 py-2.5 rounded-[4px] group"
         style={{ background: 'rgba(30,58,47,0.04)', border: '1px solid rgba(30,58,47,0.1)' }}
       >
-        <Building2 size={13} style={{ color: '#1E3A2F', flexShrink: 0 }} />
+        <RefIcon size={13} style={{ color: '#1E3A2F', flexShrink: 0 }} />
         <span className="font-sans text-[13px] text-ink flex-1 truncate">
-          {linked ? linked.title : (block.content ?? 'Hotel reference')}
+          {linked ? linked.title : (block.content ?? 'Reference')}
         </span>
         <button
           onClick={() => onDelete(block.id)}
@@ -467,6 +471,57 @@ function PdfBlockPopover({ onAdd, onClose }: { onAdd: (content: string) => void;
   );
 }
 
+/* ─── Reference item picker (hotel/flight/transfer/activity) ────────────────── */
+function RefItemPicker({
+  label, Icon, items, blockType, dayId, sortOrder, show, setShow,
+}: {
+  label: string;
+  Icon: typeof Building2;
+  items: { id: number; title: string; destName: string }[];
+  blockType: string;
+  dayId: number;
+  sortOrder: number;
+  show: boolean;
+  setShow: (v: boolean) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShow(!show)}
+        className="inline-flex items-center gap-1.5 font-sans text-[11px] px-2.5 py-[5px] rounded-[3px] cursor-pointer transition-colors"
+        style={{ background: 'rgba(30,58,47,0.06)', border: '1px solid rgba(30,58,47,0.14)', color: '#1E3A2F' }}
+      >
+        <Icon size={11} /> {label}
+      </button>
+      {show && (
+        <div
+          className="absolute left-0 top-full mt-1 bg-white rounded-[4px] z-50 py-1"
+          style={{ border: '1px solid rgba(22,26,23,0.12)', boxShadow: '0 4px 14px rgba(22,26,23,0.1)', minWidth: 200 }}
+        >
+          {items.map(h => (
+            <button
+              key={h.id}
+              onClick={() => {
+                fetch('/api/itinerary/blocks', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ dayId, type: blockType, content: h.title, itemId: h.id, sortOrder }),
+                }).then(() => { setShow(false); });
+              }}
+              className="w-full text-left px-3 py-2 hover:bg-paper transition-colors"
+              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              <span className="font-sans text-[12px] text-ink block truncate">{h.title}</span>
+              <span className="font-sans text-[10px] text-ink-mute">{h.destName}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Day panel ─────────────────────────────────────────────────────────────── */
 
 function DayPanel({
@@ -496,10 +551,24 @@ function DayPanel({
     d.items.filter(i => isHotelItem(i)).map(i => ({ id: i.id, title: i.title, destName: d.name }))
   );
 
+  // Flight/transfer/activity items for their respective ref pickers
+  const flightItems = destinations.flatMap(d =>
+    d.items.filter(i => !isHotelItem(i) && i.type === 'flight').map(i => ({ id: i.id, title: i.title, destName: d.name }))
+  );
+  const transferItems = destinations.flatMap(d =>
+    d.items.filter(i => !isHotelItem(i) && i.type === 'transfer').map(i => ({ id: i.id, title: i.title, destName: d.name }))
+  );
+  const activityItems = destinations.flatMap(d =>
+    d.items.filter(i => !isHotelItem(i) && (i.type === 'activity' || i.type === 'experience')).map(i => ({ id: i.id, title: i.title, destName: d.name }))
+  );
+
   const [showHotelPicker, setShowHotelPicker] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [showPdfPicker, setShowPdfPicker] = useState(false);
+  const [showFlightPicker, setShowFlightPicker] = useState(false);
+  const [showTransferPicker, setShowTransferPicker] = useState(false);
+  const [showActivityPicker, setShowActivityPicker] = useState(false);
 
   const destName = day.destinationId
     ? destinations.find(d => d.id === day.destinationId)?.name
@@ -709,46 +778,23 @@ function DayPanel({
             )}
           </div>
 
-          {/* Hotel ref — only if hotels exist */}
-          {hotelItems.length > 0 && (
-            <div className="relative">
-              <button
-                onClick={() => setShowHotelPicker(v => !v)}
-                className="inline-flex items-center gap-1.5 font-sans text-[11px] px-2.5 py-[5px] rounded-[3px] cursor-pointer transition-colors"
-                style={{
-                  background: 'rgba(30,58,47,0.06)',
-                  border: '1px solid rgba(30,58,47,0.14)',
-                  color: '#1E3A2F',
-                }}
-              >
-                <Building2 size={11} /> Hotel
-              </button>
-              {showHotelPicker && (
-                <div
-                  className="absolute left-0 top-full mt-1 bg-white rounded-[4px] z-50 py-1"
-                  style={{ border: '1px solid rgba(22,26,23,0.12)', boxShadow: '0 4px 14px rgba(22,26,23,0.1)', minWidth: 200 }}
-                >
-                  {hotelItems.map(h => (
-                    <button
-                      key={h.id}
-                      onClick={() => {
-                        fetch('/api/itinerary/blocks', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ dayId: day.id, type: 'hotel_ref', content: h.title, itemId: h.id, sortOrder: day.blocks.length }),
-                        }).then(() => { setShowHotelPicker(false); });
-                      }}
-                      className="w-full text-left px-3 py-2 hover:bg-paper transition-colors"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                      <span className="font-sans text-[12px] text-ink block truncate">{h.title}</span>
-                      <span className="font-sans text-[10px] text-ink-mute">{h.destName}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Reference pickers — only shown if the trip has items of that type */}
+          <RefItemPicker
+            label="Hotel" Icon={Building2} items={hotelItems} blockType="hotel_ref"
+            dayId={day.id} sortOrder={day.blocks.length} show={showHotelPicker} setShow={setShowHotelPicker}
+          />
+          <RefItemPicker
+            label="Flight" Icon={Plane} items={flightItems} blockType="flight_ref"
+            dayId={day.id} sortOrder={day.blocks.length} show={showFlightPicker} setShow={setShowFlightPicker}
+          />
+          <RefItemPicker
+            label="Transfer" Icon={CarFront} items={transferItems} blockType="transfer_ref"
+            dayId={day.id} sortOrder={day.blocks.length} show={showTransferPicker} setShow={setShowTransferPicker}
+          />
+          <RefItemPicker
+            label="Activity" Icon={Ticket} items={activityItems} blockType="activity_ref"
+            dayId={day.id} sortOrder={day.blocks.length} show={showActivityPicker} setShow={setShowActivityPicker}
+          />
         </div>
 
       </div>
