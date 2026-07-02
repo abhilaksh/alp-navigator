@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { destinations } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 import { extractNarrative } from '@/lib/ai/extract-narrative';
 
 export async function POST(
@@ -44,11 +45,12 @@ Focus on what makes this destination worth the trip — a specific quality, the 
 Keep it under 60 words. No heading, no bullet points. Plain prose only.`.trim();
 
   try {
+    const hapuppyKey = await getIntegrationKey((await getUserWithTeam(user.id))?.teamId ?? null, 'hapuppyApiKey');
     const aiRes = await fetch('https://beta.hapuppy.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.HAPUPPY_API_KEY}`,
+        'Authorization': `Bearer ${hapuppyKey}`,
       },
       body: JSON.stringify({
         model: 'glm-5.2',

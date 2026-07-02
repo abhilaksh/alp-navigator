@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 
 interface PexelsPhoto {
   id: number;
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q');
   if (!q) return NextResponse.json({ photos: [] });
 
-  const apiKey = process.env.PEXELS_API_KEY;
+  const apiKey = await getIntegrationKey((await getUserWithTeam(user.id))?.teamId ?? null, 'pexelsApiKey');
   if (!apiKey) return NextResponse.json({ error: 'Pexels API key not configured' }, { status: 500 });
 
   const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=12&orientation=landscape`;

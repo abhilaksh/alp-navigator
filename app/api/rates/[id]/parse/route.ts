@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { rates, hotelDetails, tripItems, destinations, type ParsedRate } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     .set({ status: 'parsing', rawText, updatedAt: new Date() })
     .where(eq(rates.id, rateId));
 
-  const apiKey = process.env.HAPUPPY_API_KEY;
+  const apiKey = await getIntegrationKey((await getUserWithTeam(user.id))?.teamId ?? null, 'hapuppyApiKey');
   if (!apiKey) {
     await db
       .update(rates)

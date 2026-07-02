@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { tripItems } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 
 type Params = { params: Promise<{ id: string }> };
 
 const HAPUPPY_URL = 'https://beta.hapuppy.com/v1/chat/completions';
-const HAPUPPY_KEY = process.env.HAPUPPY_API_KEY ?? '';
 
 const SYSTEM_PROMPT = `You are an expert travel booking data extractor. Given a hotel booking confirmation email or text, extract the key booking details into structured JSON. Be precise and literal — only extract what is explicitly stated, never infer. Return ONLY the JSON object, no explanation.`;
 
@@ -57,11 +57,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!text?.trim()) return NextResponse.json({ error: 'text required' }, { status: 400 });
 
   try {
+    const hapuppyKey = await getIntegrationKey((await getUserWithTeam(user.id))?.teamId ?? null, 'hapuppyApiKey');
     const resp = await fetch(HAPUPPY_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${HAPUPPY_KEY}`,
+        Authorization: `Bearer ${hapuppyKey}`,
       },
       body: JSON.stringify({
         model: 'glm-5.2',

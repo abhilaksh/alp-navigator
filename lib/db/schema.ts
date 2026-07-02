@@ -408,6 +408,31 @@ export const advisorProfilesRelations = relations(advisorProfiles, ({ one }) => 
   team: one(teams, { fields: [advisorProfiles.teamId], references: [teams.id] }),
 }));
 
+// ─── Integration Settings ───────────────────────────────────────────────────────
+// Team-scoped overrides for third-party API keys. A null/empty column here means
+// "use the process.env default" — see lib/settings/integration-keys.ts.
+
+export const integrationSettings = mysqlTable('integration_settings', {
+  id: int('id').autoincrement().primaryKey(),
+  teamId: int('team_id').notNull().references(() => teams.id).unique(),
+  serpapiKey: text('serpapi_key'),
+  pexelsApiKey: text('pexels_api_key'),
+  hapuppyApiKey: text('hapuppy_api_key'),
+  cloudflareAccountId: text('cloudflare_account_id'),
+  cloudflareImagesApiToken: text('cloudflare_images_api_token'),
+  r2AccountId: text('r2_account_id'),
+  r2AccessKeyId: text('r2_access_key_id'),
+  r2SecretAccessKey: text('r2_secret_access_key'),
+  r2BucketName: text('r2_bucket_name'),
+  r2PublicUrlBase: text('r2_public_url_base'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const integrationSettingsRelations = relations(integrationSettings, ({ one }) => ({
+  team: one(teams, { fields: [integrationSettings.teamId], references: [teams.id] }),
+}));
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface AdvisorProfile {
   displayName: string | null;
@@ -20,13 +21,28 @@ const EMPTY: AdvisorProfile = {
   virtuosoMembership: null, iataNumber: null, quoteFooter: null,
 };
 
+interface IntegrationKeys {
+  serpapiKey: string; pexelsApiKey: string; hapuppyApiKey: string;
+  cloudflareAccountId: string; cloudflareImagesApiToken: string;
+  r2AccountId: string; r2AccessKeyId: string; r2SecretAccessKey: string;
+  r2BucketName: string; r2PublicUrlBase: string;
+}
+
+const EMPTY_KEYS: IntegrationKeys = {
+  serpapiKey: '', pexelsApiKey: '', hapuppyApiKey: '',
+  cloudflareAccountId: '', cloudflareImagesApiToken: '',
+  r2AccountId: '', r2AccessKeyId: '', r2SecretAccessKey: '',
+  r2BucketName: '', r2PublicUrlBase: '',
+};
+
 function Field({
-  label, value, onChange, placeholder, hint, mono = false, multiline = false,
+  label, value, onChange, placeholder, hint, mono = false, multiline = false, secret = false,
 }: {
   label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; hint?: string; mono?: boolean; multiline?: boolean;
+  placeholder?: string; hint?: string; mono?: boolean; multiline?: boolean; secret?: boolean;
 }) {
-  const cls = `w-full rounded-[4px] border border-ink/12 bg-transparent px-3 py-2 text-[13px] text-ink outline-none focus:border-brass/60 focus:ring-0 transition-colors placeholder:text-ink/30 ${mono ? 'font-mono' : 'font-sans'}`;
+  const [revealed, setRevealed] = useState(false);
+  const cls = `w-full rounded-[4px] border border-ink/12 bg-transparent px-3 py-2 text-[13px] text-ink outline-none focus:border-brass/60 focus:ring-0 transition-colors placeholder:text-ink/30 ${mono ? 'font-mono' : 'font-sans'} ${secret ? 'pr-9' : ''}`;
   return (
     <div>
       <label className="block font-sans text-[11px] font-medium text-ink-soft uppercase tracking-[0.08em] mb-1.5">
@@ -41,12 +57,25 @@ function Field({
           rows={3}
         />
       ) : (
-        <input
-          className={cls}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-        />
+        <div className="relative">
+          <input
+            className={cls}
+            type={secret && !revealed ? 'password' : 'text'}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder={placeholder}
+          />
+          {secret && (
+            <button
+              type="button"
+              onClick={() => setRevealed(v => !v)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60 transition-colors"
+              tabIndex={-1}
+            >
+              {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          )}
+        </div>
       )}
       {hint && <p className="mt-1 font-sans text-[11px] text-ink/40">{hint}</p>}
     </div>
@@ -64,15 +93,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<AdvisorProfile>(EMPTY);
+  const [keys, setKeys] = useState<IntegrationKeys>(EMPTY_KEYS);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/advisor-profile')
-      .then(r => r.json())
-      .then(data => {
-        if (data) setProfile(prev => ({ ...prev, ...data }));
+    Promise.all([
+      fetch('/api/advisor-profile').then(r => r.json()),
+      fetch('/api/integration-settings').then(r => r.json()),
+    ])
+      .then(([profileData, keysData]) => {
+        if (profileData) setProfile(prev => ({ ...prev, ...profileData }));
+        if (keysData) setKeys(prev => ({ ...prev, ...keysData }));
       })
       .finally(() => setLoading(false));
   }, []);
@@ -82,15 +115,27 @@ export default function SettingsPage() {
     onChange: (v: string) => setProfile(prev => ({ ...prev, [key]: v })),
   }), [profile]);
 
+  const keyField = useCallback((key: keyof IntegrationKeys) => ({
+    value: keys[key] ?? '',
+    onChange: (v: string) => setKeys(prev => ({ ...prev, [key]: v })),
+  }), [keys]);
+
   async function handleSave() {
     setSaving(true);
     setSaved(false);
     try {
-      await fetch('/api/advisor-profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile),
-      });
+      await Promise.all([
+        fetch('/api/advisor-profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(profile),
+        }),
+        fetch('/api/integration-settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(keys),
+        }),
+      ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } finally {
@@ -204,6 +249,42 @@ export default function SettingsPage() {
           {...field('quoteFooter')}
         />
       </Section>
+
+      {/* Integrations */}
+      <Section title="Integrations">
+        <p className="font-sans text-[12px] text-ink/45 -mt-1">
+          Overrides the shared defaults for your team only. Leave blank to keep using the default.
+        </p>
+
+        <div className="space-y-3">
+          <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/40">Content sourcing</p>
+          <div className="grid grid-cols-1 gap-4">
+            <Field label="SerpApi key" placeholder="Used for live Google Hotels search" secret mono {...keyField('serpapiKey')} />
+            <Field label="Pexels API key" placeholder="Used for destination and itinerary photo search" secret mono {...keyField('pexelsApiKey')} />
+            <Field label="Hapuppy API key" placeholder="Used for AI narrative generation and rate parsing" secret mono {...keyField('hapuppyApiKey')} />
+          </div>
+        </div>
+
+        <div className="space-y-3 pt-2">
+          <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.1em] text-ink/40">Media uploads</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Cloudflare account ID" secret mono {...keyField('cloudflareAccountId')} />
+            <Field label="Cloudflare Images token" secret mono {...keyField('cloudflareImagesApiToken')} />
+            <Field label="R2 account ID" secret mono {...keyField('r2AccountId')} />
+            <Field label="R2 access key ID" secret mono {...keyField('r2AccessKeyId')} />
+            <Field label="R2 secret access key" secret mono {...keyField('r2SecretAccessKey')} />
+            <Field label="R2 bucket name" mono {...keyField('r2BucketName')} />
+          </div>
+          <Field
+            label="R2 public URL base"
+            placeholder="https://pub-xxxx.r2.dev"
+            mono
+            hint="The public base URL uploaded PDFs are served from"
+            {...keyField('r2PublicUrlBase')}
+          />
+        </div>
+      </Section>
     </div>
   );
 }
+

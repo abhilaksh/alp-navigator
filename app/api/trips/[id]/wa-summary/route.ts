@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/lib/db/drizzle';
 import { trips } from '@/lib/db/schema';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
 import { extractNarrative } from '@/lib/ai/extract-narrative';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     personalNote?: string | null;
   };
 
-  const apiKey = process.env.HAPUPPY_API_KEY;
+  const apiKey = await getIntegrationKey((await getUserWithTeam(user.id))?.teamId ?? null, 'hapuppyApiKey');
   if (!apiKey) return NextResponse.json({ error: 'AI not configured' }, { status: 503 });
 
   const firstName = clientName?.split(' ')[0] ?? 'there';

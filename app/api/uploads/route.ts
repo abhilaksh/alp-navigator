@@ -1,32 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomBytes } from 'crypto';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 
 const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15MB
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const ALLOWED_PDF_TYPE = 'application/pdf';
 
-function r2Client(): S3Client {
+interface UploadKeys {
+  cloudflareAccountId?: string;
+  cloudflareImagesApiToken?: string;
+  r2AccountId?: string;
+  r2AccessKeyId?: string;
+  r2SecretAccessKey?: string;
+  r2BucketName?: string;
+  r2PublicUrlBase?: string;
+}
+
+async function resolveUploadKeys(teamId: number | null): Promise<UploadKeys> {
+  const [
+    cloudflareAccountId, cloudflareImagesApiToken,
+    r2AccountId, r2AccessKeyId, r2SecretAccessKey, r2BucketName, r2PublicUrlBase,
+  ] = await Promise.all([
+    getIntegrationKey(teamId, 'cloudflareAccountId'),
+    getIntegrationKey(teamId, 'cloudflareImagesApiToken'),
+    getIntegrationKey(teamId, 'r2AccountId'),
+    getIntegrationKey(teamId, 'r2AccessKeyId'),
+    getIntegrationKey(teamId, 'r2SecretAccessKey'),
+    getIntegrationKey(teamId, 'r2BucketName'),
+    getIntegrationKey(teamId, 'r2PublicUrlBase'),
+  ]);
+  return { cloudflareAccountId, cloudflareImagesApiToken, r2AccountId, r2AccessKeyId, r2SecretAccessKey, r2BucketName, r2PublicUrlBase };
+}
+
+function r2Client(keys: UploadKeys): S3Client {
   return new S3Client({
     region: 'auto',
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    endpoint: `https://${keys.r2AccountId}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      accessKeyId: keys.r2AccessKeyId!,
+      secretAccessKey: keys.r2SecretAccessKey!,
     },
   });
 }
 
-async function uploadImage(file: File): Promise<string> {
+async function uploadImage(file: File, keys: UploadKeys): Promise<string> {
   const cfForm = new FormData();
   cfForm.set('file', file, file.name);
 
   const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/images/v1`,
+    `https://api.cloudflare.com/client/v4/accounts/${keys.cloudflareAccountId}/images/v1`,
     {
       method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_IMAGES_API_TOKEN}` },
+      headers: { Authorization: `Bearer ${keys.cloudflareImagesApiToken}` },
       body: cfForm,
     }
   );
@@ -42,19 +69,19 @@ async function uploadImage(file: File): Promise<string> {
   return url;
 }
 
-async function uploadPdf(file: File): Promise<string> {
+async function uploadPdf(file: File, keys: UploadKeys): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const key = `pdfs/${randomBytes(8).toString('hex')}-${safeName}`;
 
-  await r2Client().send(new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
+  await r2Client(keys).send(new PutObjectCommand({
+    Bucket: keys.r2BucketName!,
     Key: key,
     Body: bytes,
     ContentType: ALLOWED_PDF_TYPE,
   }));
 
-  const base = process.env.R2_PUBLIC_URL_BASE!.replace(/\/$/, '');
+  const base = keys.r2PublicUrlBase!.replace(/\/$/, '');
   return `${base}/${key}`;
 }
 
@@ -71,13 +98,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'File exceeds 15MB limit' }, { status: 400 });
   }
 
+  const teamId = (await getUserWithTeam(user.id))?.teamId ?? null;
+  const keys = await resolveUploadKeys(teamId);
+
   try {
     if (ALLOWED_IMAGE_TYPES.has(file.type)) {
-      const url = await uploadImage(file);
+      const url = await uploadImage(file, keys);
       return NextResponse.json({ url, fileName: file.name, mimeType: file.type });
     }
     if (file.type === ALLOWED_PDF_TYPE) {
-      const url = await uploadPdf(file);
+      const url = await uploadPdf(file, keys);
       return NextResponse.json({ url, fileName: file.name, mimeType: file.type });
     }
     return NextResponse.json({ error: `Unsupported file type: ${file.type}` }, { status: 400 });

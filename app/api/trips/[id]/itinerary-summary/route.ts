@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { itineraryDays, trips } from '@/lib/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
 import { extractNarrative } from '@/lib/ai/extract-narrative';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const userPrompt = `Trip: ${trip.label}${clientName ? ` for ${clientName}` : ''}\n\n${dayLines}`;
 
-  const apiKey = process.env.HAPUPPY_API_KEY;
+  const apiKey = await getIntegrationKey((await getUserWithTeam(user.id))?.teamId ?? null, 'hapuppyApiKey');
   if (!apiKey) return NextResponse.json({ error: 'AI service not configured' }, { status: 500 });
 
   try {

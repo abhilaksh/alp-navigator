@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser } from '@/lib/db/queries';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import { getIntegrationKey } from '@/lib/settings/integration-keys';
 
 interface SerpHotelResult {
   name?: string;
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   if (!query) return NextResponse.json({ error: 'query is required' }, { status: 400 });
 
-  const apiKey = process.env.SERPAPI_KEY;
+  const apiKey = await getIntegrationKey((await getUserWithTeam(user.id))?.teamId ?? null, 'serpapiKey');
   if (!apiKey) return NextResponse.json({ error: 'SERPAPI_KEY not configured' }, { status: 500 });
 
   const searchParams = new URLSearchParams({
