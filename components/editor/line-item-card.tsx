@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Plane, Car, Ticket, Star, ChevronRight, X, Check, TrainFront, Ship, Bus } from 'lucide-react';
+import { Plane, Car, Ticket, Star, ChevronRight, X, Check, TrainFront, Ship, Bus, GripVertical } from 'lucide-react';
 import { ItemRateCard, type ItemRateState } from './item-rate-card';
 import type { ParsedItemRate } from '@/lib/db/schema';
+import type { DragHandleProps } from './sortable-item';
 
 export type LineItemType = 'flight' | 'transfer' | 'activity' | 'experience';
 
@@ -40,6 +41,7 @@ interface LineItemCardProps {
   onSelectRateProposal: (rateId: number, proposal: ParsedItemRate) => void;
   onRateExpiryChange: (rateId: number, expiresAt: string | null) => void;
   onRefreshBookingLink?: (rateId: number) => Promise<void>;
+  dragHandleProps?: DragHandleProps;
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -391,6 +393,7 @@ function ActivityForm({ f, set }: { f: Fields; set: (k: keyof Fields, v: string 
 export function LineItemCard({
   item, defaultOpen = false, onUpdate, onDelete,
   onAddRate, onRemoveRate, onParseRate, onRateSourceChange, onSelectRateProposal, onRateExpiryChange, onRefreshBookingLink,
+  dragHandleProps,
 }: LineItemCardProps) {
   const [expanded, setExpanded] = useState(defaultOpen);
   const [saving, setSaving] = useState(false);
@@ -439,6 +442,15 @@ export function LineItemCard({
           className="text-ink-mute flex-shrink-0 transition-transform"
           style={{ transform: expanded ? 'rotate(90deg)' : 'none' }}
         />
+        <button
+          {...(dragHandleProps?.attributes ?? {})}
+          {...(dragHandleProps?.listeners ?? {})}
+          onClick={e => e.stopPropagation()}
+          className="text-ink-mute flex-shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+          style={{ touchAction: 'none', cursor: 'grab' }}
+        >
+          <GripVertical size={11} />
+        </button>
         <span className="flex items-center gap-1 text-ink-mute flex-shrink-0">
           {getItemIcon(item)}
           <span className="text-[10px] font-sans font-semibold tracking-[0.08em] uppercase">{TYPE_LABELS[item.type]}</span>

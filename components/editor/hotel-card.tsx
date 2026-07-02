@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { ChevronUp, ChevronDown, X, MapPin, Sparkles } from 'lucide-react';
+import { ChevronUp, ChevronDown, X, MapPin, Sparkles, GripVertical, RotateCw } from 'lucide-react';
 import { RateCard, type RateState } from './rate-card';
 import { SpecialRequestsPanel } from './special-requests-panel';
 import type { ParsedRate } from '@/lib/db/schema';
+import { buildForaSearchUrl, buildExpediaSearchUrl } from '@/lib/hotel-links';
+import type { DragHandleProps } from './sortable-item';
 
 const BADGE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -56,9 +58,14 @@ export interface HotelItemState {
 interface HotelCardProps {
   item: HotelItemState;
   index: number;
+  checkin?: string | null;
+  checkout?: string | null;
+  adults?: number | null;
+  children?: number | null;
   onRemove: (itemId: number) => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
+  dragHandleProps?: DragHandleProps;
+  onRefreshRate?: (itemId: number) => Promise<void>;
+  refreshingRate?: boolean;
   onAddRate: (hotelDetailId: number) => Promise<void>;
   onRemoveRate: (rateId: number) => void;
   onParseRate: (rateId: number, rawText: string) => Promise<void>;
@@ -98,8 +105,8 @@ const BOOKING_BADGE: Record<BookingStatus, { color: string; bg: string }> = {
 };
 
 export function HotelCard({
-  item, index,
-  onRemove, onMoveUp, onMoveDown, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
+  item, index, checkin, checkout, adults, children,
+  onRemove, dragHandleProps, onRefreshRate, refreshingRate, onAddRate, onRemoveRate, onParseRate, onSourceChange, onSelectProposal,
   onTitleChange, onRecommendationChange, onRecommendationBlur, onLocationScoreChange, onLocationScoreBlur,
   onHoldExpiryChange, onPreferredStatusChange, onEliminationNoteChange, onFamiliarityChange,
   onCommissionChange,
@@ -129,8 +136,9 @@ export function HotelCard({
   })();
 
   // Fora / ExpediaTAAP URLs
-  const foraUrl = detail?.foraId ? `https://travel.fora.travel/hotels/${detail.foraId}` : null;
-  const expediaUrl = 'https://www.expediataap.com/';
+  const foraListingUrl = detail?.foraId ? `https://travel.fora.travel/hotels/${detail.foraId}` : null;
+  const foraSearchUrl = buildForaSearchUrl({ hotelName: item.title, checkin, checkout, adults, children });
+  const expediaUrl = buildExpediaSearchUrl({ hotelName: item.title, checkin, checkout, adults, lat: detail?.lat, lng: detail?.lng });
   const websiteUrl = detail?.hotelWebsite ?? null;
 
   // Hold expiry computation
@@ -174,21 +182,15 @@ export function HotelCard({
       <div className="relative z-[1]">
         {/* ── Card header ──────────────────────────────────────────────── */}
         <div className="flex items-center gap-[7px] px-[11px] py-[11px] pb-[9px]">
-          {/* Reorder buttons */}
-          <div className="flex flex-col gap-[1px] flex-shrink-0 opacity-0 group-hover/hotel:opacity-60 hover:!opacity-100 transition-opacity">
-            <button
-              onClick={onMoveUp}
-              disabled={!onMoveUp}
-              className="text-ink-mute cursor-pointer leading-none disabled:opacity-20 disabled:cursor-default transition-colors hover:text-brass"
-              style={{ fontSize: 10, lineHeight: 1 }}
-            >▲</button>
-            <button
-              onClick={onMoveDown}
-              disabled={!onMoveDown}
-              className="text-ink-mute cursor-pointer leading-none disabled:opacity-20 disabled:cursor-default transition-colors hover:text-brass"
-              style={{ fontSize: 10, lineHeight: 1 }}
-            >▼</button>
-          </div>
+          {/* Drag handle */}
+          <button
+            {...(dragHandleProps?.attributes ?? {})}
+            {...(dragHandleProps?.listeners ?? {})}
+            className="text-ink-mute flex-shrink-0 opacity-0 group-hover/hotel:opacity-60 hover:!opacity-100 transition-opacity"
+            style={{ touchAction: 'none', cursor: 'grab' }}
+          >
+            <GripVertical size={14} />
+          </button>
 
           {/* Badge */}
           <span
@@ -223,6 +225,26 @@ export function HotelCard({
               style={{ background: 'rgba(22,26,23,0.06)' }}
             >
               {detail.rating.toFixed(1)}
+            </span>
+          )}
+
+          {/* Google rate + refresh */}
+          {onRefreshRate && (
+            <span className="flex items-center gap-[3px] flex-shrink-0">
+              {detail?.googleRateInr != null && (
+                <span className="font-mono text-[10px] text-ink-mute">
+                  ₹{Math.round(detail.googleRateInr / 1000)}k/n
+                </span>
+              )}
+              <button
+                onClick={() => onRefreshRate(item.id)}
+                disabled={refreshingRate}
+                title="Refresh Google rate"
+                className="text-ink-mute hover:text-spruce transition-colors disabled:opacity-50"
+                style={{ background: 'none', border: 'none', padding: 0, lineHeight: 0 }}
+              >
+                <RotateCw size={11} className={refreshingRate ? 'spin' : ''} />
+              </button>
             </span>
           )}
 
@@ -353,8 +375,9 @@ export function HotelCard({
 
             {/* Links */}
             <div className="flex gap-[5px] px-[11px] pb-[10px] pl-[40px]">
-              {foraUrl && (
-                <a href={foraUrl} target="_blank" rel="noopener" className="hotel-link">Fora ↗</a>
+              <a href={foraSearchUrl} target="_blank" rel="noopener" className="hotel-link">Fora ↗</a>
+              {foraListingUrl && (
+                <a href={foraListingUrl} target="_blank" rel="noopener" className="hotel-link">Fora listing ↗</a>
               )}
               <a href={expediaUrl} target="_blank" rel="noopener" className="hotel-link">ExpediaTAAP ↗</a>
               {websiteUrl && (

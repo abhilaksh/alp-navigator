@@ -3,6 +3,9 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, MapPin, Sparkles, Loader2 } from 'lucide-react';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { SortableItem } from '@/components/editor/sortable-item';
 import { Topbar, type SaveStatus, type WorkflowStatus, type IntakeStatus } from '@/components/editor/topbar';
 import { HotelCard, type HotelItemState } from '@/components/editor/hotel-card';
 import { LineItemCard, type LineItemState } from '@/components/editor/line-item-card';
@@ -11,6 +14,7 @@ import { FlightSearchPanel, type FlightItinerary, type FlightLeg } from '@/compo
 import type { ParsedRate, ParsedItemRate } from '@/lib/db/schema';
 import type { TripFull, DestinationState, RateRow, VisaInfoState } from './types';
 import { mapDestinations, updateDest, updateItem, updateLineItem, updateRate, updateItemRate, isHotelItem } from './editor-utils';
+import { autoLinkItemToItinerary } from '@/lib/itinerary/auto-link';
 import { ItineraryBuilder } from '@/components/editor/itinerary-builder';
 import { BookingsPanel } from '@/components/editor/bookings-panel';
 import { ChecklistPanel } from '@/components/editor/checklist-panel';
@@ -175,6 +179,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
   const [showShare, setShowShare]   = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const [flightSearchOpen, setFlightSearchOpen] = useState(false);
+  const [hotelSearchCache, setHotelSearchCache] = useState<Record<string, SearchResult[]>>({});
+  const [refreshingHotelId, setRefreshingHotelId] = useState<number | null>(null);
   const saveTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated                    = useRef(false);
 
@@ -510,6 +516,12 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
+      if (activeDest?.checkin) {
+        autoLinkItemToItinerary({
+          tripId: id, destinationId: activeDestId, destinationName: activeDest.name,
+          itemId: data.item.id, itemTitle: hotel.name, refType: 'hotel_ref', date: activeDest.checkin,
+        });
+      }
     }
   }
 
@@ -538,6 +550,12 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         },
       };
       setDests(prev => updateDest(prev, activeDestId, d => ({ ...d, items: [...d.items, newItem] })));
+      if (activeDest?.checkin) {
+        autoLinkItemToItinerary({
+          tripId: id, destinationId: activeDestId, destinationName: activeDest.name,
+          itemId: data.item.id, itemTitle: 'New hotel', refType: 'hotel_ref', date: activeDest.checkin,
+        });
+      }
     }
   }
 
@@ -555,16 +573,57 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     setDests(prev => prev.map(d => ({ ...d, items: d.items.filter(i => i.id !== itemId) })));
   }
 
-  function handleMoveHotel(destId: number, fromIndex: number, toIndex: number) {
+  async function handleRefreshHotelRate(itemId: number) {
+    const hotelItem = destinations.flatMap(d => d.items).filter(isHotelItem).find(i => i.id === itemId);
+    const dest = destinations.find(d => d.items.some(i => i.id === itemId));
+    if (!hotelItem?.hotelDetails || !dest) return;
+    setRefreshingHotelId(itemId);
+    try {
+      const res = await fetch('/api/search/hotels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `${hotelItem.title} ${dest.name}`,
+          checkin: dest.checkin ?? undefined,
+          checkout: dest.checkout ?? undefined,
+        }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const match = (data.results ?? [])[0] as Record<string, unknown> | undefined;
+      if (!match) return;
+      const googleRateInr = (match.rate_inr as number) ?? null;
+      const rating = (match.rating as number) ?? null;
+      await fetch(`/api/hotels/${hotelItem.hotelDetails.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleRateInr, rating }),
+      }).catch(() => {});
+      setDests(prev => updateItem(prev, itemId, i => ({
+        ...i,
+        hotelDetails: i.hotelDetails ? { ...i.hotelDetails, googleRateInr, rating } : null,
+      })));
+    } catch { /* no-op */ } finally {
+      setRefreshingHotelId(null);
+    }
+  }
+
+  function handleReorderItems(destId: number, activeId: number, overId: number) {
     setDests(prev => prev.map(d => {
       if (d.id !== destId) return d;
-      const items = [...d.items];
-      const [moved] = items.splice(fromIndex, 1);
-      items.splice(toIndex, 0, moved);
-      const reordered = items.map((item, idx) => ({ ...item, sortOrder: idx }));
+      const fromIndex = d.items.findIndex(i => i.id === activeId);
+      const toIndex = d.items.findIndex(i => i.id === overId);
+      if (fromIndex === -1 || toIndex === -1) return d;
+      const reordered = arrayMove(d.items, fromIndex, toIndex).map((item, idx) => ({ ...item, sortOrder: idx }));
       reordered.forEach(item => {
         if (isHotelItem(item) && item.hotelDetails) {
           fetch(`/api/hotels/${item.hotelDetails.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sortOrder: item.sortOrder }),
+          }).catch(() => {});
+        } else if (!isHotelItem(item)) {
+          fetch(`/api/items/${item.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sortOrder: item.sortOrder }),
@@ -574,6 +633,14 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       return { ...d, items: reordered };
     }));
   }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !activeDestId) return;
+    handleReorderItems(activeDestId, Number(active.id), Number(over.id));
+  }
+
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   function handleHotelTitleChange(itemId: number, title: string) {
     setDests(prev => updateItem(prev, itemId, i => ({ ...i, title })));
@@ -976,6 +1043,14 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       itemRates: [data.itemRate],
     };
     setDests(prev => updateDest(prev, destinationId, d => ({ ...d, items: [...d.items, newItem] })));
+    const destForLeg = destinations.find(d => d.id === destinationId);
+    if (destForLeg && leg.departure_datetime) {
+      autoLinkItemToItinerary({
+        tripId: id, destinationId, destinationName: destForLeg.name,
+        itemId: data.item.id, itemTitle: data.item.title, refType: 'flight_ref',
+        date: leg.departure_datetime.slice(0, 10),
+      });
+    }
   }
 
   async function handleAddFlightFromSearch(itin: FlightItinerary, destinationId: number, passengerCount: number) {
@@ -1665,58 +1740,73 @@ export function Editor({ trip: initialTrip }: EditorProps) {
                   </p>
                 </div>
               ) : (
-                (activeDest?.items ?? []).map((item, i) => {
-                  if (isHotelItem(item)) {
-                    const hotelIdx = hotelItems.indexOf(item);
-                    return (
-                      <HotelCard
-                        key={item.id}
-                        item={item}
-                        index={hotelIdx}
-                        onRemove={handleRemoveHotel}
-                        onMoveUp={hotelIdx > 0 ? () => handleMoveHotel(activeDest!.id, hotelIdx, hotelIdx - 1) : undefined}
-                        onMoveDown={hotelIdx < hotelItems.length - 1 ? () => handleMoveHotel(activeDest!.id, hotelIdx, hotelIdx + 1) : undefined}
-                        onAddRate={handleAddRate}
-                        onRemoveRate={handleRemoveRate}
-                        onParseRate={handleParseRate}
-                        onSourceChange={handleSourceChange}
-                        onSelectProposal={handleSelectProposal}
-                        onTitleChange={handleHotelTitleChange}
-                        onRecommendationChange={handleRecommendationChange}
-                        onRecommendationBlur={handleRecommendationBlur}
-                        onLocationScoreChange={handleLocationScoreChange}
-                        onLocationScoreBlur={handleLocationScoreBlur}
-                        onHoldExpiryChange={handleHoldExpiryChange}
-                        onPreferredStatusChange={handlePreferredStatusChange}
-                        onEliminationNoteChange={handleEliminationNoteChange}
-                        onFamiliarityChange={handleFamiliarityChange}
-                        onCommissionChange={handleCommissionChange}
-                        onCancellationFreeUntilChange={handleCancellationFreeUntilChange}
-                        onVisaRequiredChange={handleVisaRequiredChange}
-                        onSpecialRequestsChange={handleSpecialRequestsChange}
-                        onBookingStatusChange={handleBookingStatusChange}
-                        onBookingRefChange={handleBookingRefChange}
-                        onRateExpiryChange={handleRateExpiryChange}
-                      />
-                    );
-                  }
-                  return (
-                    <LineItemCard
-                      key={item.id}
-                      item={item as LineItemState}
-                      defaultOpen={newItemIds.has(item.id)}
-                      onUpdate={handleUpdateLineItem}
-                      onDelete={handleDeleteLineItem}
-                      onAddRate={handleAddItemRate}
-                      onRemoveRate={handleRemoveItemRate}
-                      onParseRate={handleParseItemRate}
-                      onRateSourceChange={handleItemRateSourceChange}
-                      onSelectRateProposal={handleSelectItemRateProposal}
-                      onRateExpiryChange={handleItemRateExpiryChange}
-                      onRefreshBookingLink={handleRefreshBookingLink}
-                    />
-                  );
-                })
+                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={(activeDest?.items ?? []).map(i => i.id)} strategy={verticalListSortingStrategy}>
+                    {(activeDest?.items ?? []).map((item, i) => {
+                      if (isHotelItem(item)) {
+                        const hotelIdx = hotelItems.indexOf(item);
+                        return (
+                          <SortableItem key={item.id} id={item.id}>
+                            {dragHandleProps => (
+                              <HotelCard
+                                item={item}
+                                index={hotelIdx}
+                                checkin={activeDest?.checkin ?? null}
+                                checkout={activeDest?.checkout ?? null}
+                                adults={adults}
+                                dragHandleProps={dragHandleProps}
+                                onRefreshRate={handleRefreshHotelRate}
+                                refreshingRate={refreshingHotelId === item.id}
+                                onRemove={handleRemoveHotel}
+                                onAddRate={handleAddRate}
+                                onRemoveRate={handleRemoveRate}
+                                onParseRate={handleParseRate}
+                                onSourceChange={handleSourceChange}
+                                onSelectProposal={handleSelectProposal}
+                                onTitleChange={handleHotelTitleChange}
+                                onRecommendationChange={handleRecommendationChange}
+                                onRecommendationBlur={handleRecommendationBlur}
+                                onLocationScoreChange={handleLocationScoreChange}
+                                onLocationScoreBlur={handleLocationScoreBlur}
+                                onHoldExpiryChange={handleHoldExpiryChange}
+                                onPreferredStatusChange={handlePreferredStatusChange}
+                                onEliminationNoteChange={handleEliminationNoteChange}
+                                onFamiliarityChange={handleFamiliarityChange}
+                                onCommissionChange={handleCommissionChange}
+                                onCancellationFreeUntilChange={handleCancellationFreeUntilChange}
+                                onVisaRequiredChange={handleVisaRequiredChange}
+                                onSpecialRequestsChange={handleSpecialRequestsChange}
+                                onBookingStatusChange={handleBookingStatusChange}
+                                onBookingRefChange={handleBookingRefChange}
+                                onRateExpiryChange={handleRateExpiryChange}
+                              />
+                            )}
+                          </SortableItem>
+                        );
+                      }
+                      return (
+                        <SortableItem key={item.id} id={item.id}>
+                          {dragHandleProps => (
+                            <LineItemCard
+                              item={item as LineItemState}
+                              defaultOpen={newItemIds.has(item.id)}
+                              dragHandleProps={dragHandleProps}
+                              onUpdate={handleUpdateLineItem}
+                              onDelete={handleDeleteLineItem}
+                              onAddRate={handleAddItemRate}
+                              onRemoveRate={handleRemoveItemRate}
+                              onParseRate={handleParseItemRate}
+                              onRateSourceChange={handleItemRateSourceChange}
+                              onSelectRateProposal={handleSelectItemRateProposal}
+                              onRateExpiryChange={handleItemRateExpiryChange}
+                              onRefreshBookingLink={handleRefreshBookingLink}
+                            />
+                          )}
+                        </SortableItem>
+                      );
+                    })}
+                  </SortableContext>
+                </DndContext>
               )}
 
               {/* Add hotel button */}
@@ -1789,6 +1879,8 @@ export function Editor({ trip: initialTrip }: EditorProps) {
               destCheckin={activeDest?.checkin ?? null}
               destCheckout={activeDest?.checkout ?? null}
               addedHotelIds={addedHotelIds}
+              cache={hotelSearchCache}
+              onCacheChange={(key, results) => setHotelSearchCache(prev => ({ ...prev, [key]: results }))}
               onAdd={handleAddHotelFromSearch}
               onAddManual={handleAddManualHotel}
             />

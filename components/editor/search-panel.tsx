@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Plus, Check, Loader2, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Check, Loader2, AlertCircle, RotateCw, Map, List } from 'lucide-react';
+import { HotelResultsMap } from './hotel-results-map';
 
 export interface SearchResult {
   id: string;
@@ -21,6 +22,8 @@ export interface SearchResult {
   lng?: number;
   locationLabel?: string | null;
   featured?: boolean;
+  fetchedAt?: number;
+  description?: string | null;
 }
 
 interface SearchPanelProps {
@@ -30,9 +33,13 @@ interface SearchPanelProps {
   destCheckin?: string | null;
   destCheckout?: string | null;
   addedHotelIds: Set<string>;
+  cache: Record<string, SearchResult[]>;
+  onCacheChange: (key: string, results: SearchResult[]) => void;
   onAdd: (hotel: SearchResult) => Promise<void>;
   onAddManual: () => Promise<void>;
 }
+
+const STALE_MS = 60 * 60 * 1000; // 1 hour
 
 const STAR_FILTERS = [
   { value: 5, label: '5★' },
@@ -53,17 +60,31 @@ function localDate(offsetDays = 0) {
   return d.toLocaleDateString('en-CA');
 }
 
-export function SearchPanel({ destinationName, tripId, destinationId, destCheckin, destCheckout, addedHotelIds, onAdd, onAddManual }: SearchPanelProps) {
+export function SearchPanel({ destinationName, tripId, destinationId, destCheckin, destCheckout, addedHotelIds, cache, onCacheChange, onAdd, onAddManual }: SearchPanelProps) {
   const [searchMode, setSearchMode] = useState<'google' | 'wp'>('google');
   const [query, setQuery] = useState(`${destinationName} luxury hotels`);
   const [checkin, setCheckin] = useState(() => destCheckin || localDate(1));
   const [checkout, setCheckout] = useState(() => destCheckout || localDate(4));
   const [starFilters, setStarFilters] = useState<Set<number>>(new Set([5, 4]));
   const [sort, setSort] = useState('relevance');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const cacheKey = `${searchMode}:${destinationName.trim().toLowerCase()}`;
+  const results = cache[cacheKey] ?? [];
+
+  // Reset any lingering loading/error indicator when switching city or mode --
+  // cached results (if any) still render immediately via `results` above.
+  useEffect(() => {
+    setStatus('idle');
+    setError(null);
+  }, [destinationId, searchMode]);
 
   // Keep the Google Hotels date finder in step with the destination's own
   // check-in/check-out -- switching destinations, or editing dates in the
@@ -114,6 +135,7 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
+        const fetchedAt = Date.now();
         const mapped: SearchResult[] = (data.results ?? []).map((r: Record<string, unknown>) => ({
           id: String(r.serpIdx ?? r.name ?? Math.random()),
           name: String(r.name ?? ''),
@@ -127,8 +149,10 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
           isVirtuoso: false,
           lat: (r.gps_coordinates as { latitude: number; longitude: number } | null)?.latitude,
           lng: (r.gps_coordinates as { latitude: number; longitude: number } | null)?.longitude,
+          description: (r.description as string) ?? null,
+          fetchedAt,
         }));
-        setResults(mapped);
+        onCacheChange(cacheKey, mapped);
       } else {
         const res = await fetch('/api/search/wp-hotels', {
           method: 'POST',
@@ -137,9 +161,10 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        setResults(data.results ?? []);
+        const fetchedAt = Date.now();
+        onCacheChange(cacheKey, (data.results ?? []).map((r: SearchResult) => ({ ...r, fetchedAt })));
       }
-      setStatus('done');
+      setStatus('idle');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed');
       setStatus('error');
@@ -153,6 +178,29 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
       await onAdd(hotel);
     } finally {
       setAdding(prev => { const n = new Set(prev); n.delete(hotel.id); return n; });
+    }
+  }
+
+  async function handleRefreshOne(hotel: SearchResult) {
+    if (refreshing.has(hotel.id)) return;
+    setRefreshing(prev => new Set(prev).add(hotel.id));
+    try {
+      const res = await fetch('/api/search/hotels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: `${hotel.name} ${destinationName}`, checkin, checkout }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const match = (data.results ?? [])[0] as Record<string, unknown> | undefined;
+      if (!match) return;
+      const fetchedAt = Date.now();
+      const updated = cache[cacheKey].map(r => r.id === hotel.id
+        ? { ...r, googleRateInr: (match.rate_inr as number) ?? r.googleRateInr, rating: (match.rating as number) ?? r.rating, fetchedAt }
+        : r);
+      onCacheChange(cacheKey, updated);
+    } finally {
+      setRefreshing(prev => { const n = new Set(prev); n.delete(hotel.id); return n; });
     }
   }
 
@@ -172,7 +220,7 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
           {(['google', 'wp'] as const).map(mode => (
             <button
               key={mode}
-              onClick={() => { setSearchMode(mode); setResults([]); setStatus('idle'); }}
+              onClick={() => setSearchMode(mode)}
               className="text-[10px] font-sans px-2.5 py-[4px] rounded-sm transition-colors cursor-pointer"
               style={{
                 background: searchMode === mode ? '#1E3A2F' : 'transparent',
@@ -283,6 +331,41 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
 
       {/* Results area */}
       <div className="flex-1 overflow-y-auto px-3 pb-5">
+        {status === 'idle' && results.length > 0 && (
+          <div className="flex justify-end gap-[2px] pt-1.5 pb-1">
+            {(['list', 'map'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setViewMode(v)}
+                className="flex items-center gap-1 text-[10px] font-sans px-2 py-[3px] rounded-sm transition-colors cursor-pointer"
+                style={{
+                  background: viewMode === v ? '#1E3A2F' : 'transparent',
+                  color: viewMode === v ? '#F6F4EE' : '#4A514B',
+                  border: `1px solid ${viewMode === v ? '#1E3A2F' : '#C9D2CC'}`,
+                }}
+              >
+                {v === 'list' ? <List size={10} /> : <Map size={10} />}
+                {v === 'list' ? 'List' : 'Map'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {status === 'idle' && results.length > 0 && viewMode === 'map' && (
+          <div className="h-[240px] rounded-[4px] overflow-hidden mb-2" style={{ border: '1px solid rgba(22,26,23,0.09)' }}>
+            <HotelResultsMap
+              results={results}
+              selectedId={highlightedId}
+              onSelect={id => {
+                setHighlightedId(id);
+                setViewMode('list');
+                requestAnimationFrame(() => cardRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+                setTimeout(() => setHighlightedId(null), 2500);
+              }}
+            />
+          </div>
+        )}
+
         {status === 'loading' && (
           <div className="flex flex-col items-center gap-3 py-10 text-ink-mute text-[13px] font-sans text-center">
             <Loader2 size={24} className="spin text-brass" />
@@ -304,7 +387,7 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
           </div>
         )}
 
-        {status === 'idle' && (
+        {status === 'idle' && !(cacheKey in cache) && (
           <div className="flex flex-col items-center justify-center py-14 text-center px-4">
             <Search size={32} className="text-glacier mb-3" />
             <p className="font-display text-base text-ink-soft mb-1">
@@ -318,26 +401,35 @@ export function SearchPanel({ destinationName, tripId, destinationId, destChecki
           </div>
         )}
 
-        {status === 'done' && results.length === 0 && (
+        {status === 'idle' && (cacheKey in cache) && results.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center px-4">
             <p className="font-display text-base text-ink-soft mb-1">No results</p>
             <p className="text-xs text-ink-mute">Try a different search or add a hotel manually.</p>
           </div>
         )}
 
-        {status === 'done' && results.length > 0 && (
+        {status === 'idle' && results.length > 0 && (
           <div className="flex flex-col gap-[7px] pt-1.5">
             {results.map(hotel => {
               const isAdded = addedHotelIds.has(hotel.id);
               const isAdding = adding.has(hotel.id);
+              const isStale = !!hotel.fetchedAt && Date.now() - hotel.fetchedAt > STALE_MS;
+              const isRefreshing = refreshing.has(hotel.id);
               return (
-                <ResultCard
-                  key={hotel.id}
-                  hotel={hotel}
-                  isAdded={isAdded}
-                  isAdding={isAdding}
-                  onAdd={() => handleAdd(hotel)}
-                />
+                <div key={hotel.id} ref={el => { cardRefs.current[hotel.id] = el; }}>
+                  <ResultCard
+                    hotel={hotel}
+                    isAdded={isAdded}
+                    isAdding={isAdding}
+                    isStale={isStale}
+                    isRefreshing={isRefreshing}
+                    isHighlighted={highlightedId === hotel.id}
+                    isExpanded={expandedId === hotel.id}
+                    onToggleExpand={() => setExpandedId(prev => prev === hotel.id ? null : hotel.id)}
+                    onAdd={() => handleAdd(hotel)}
+                    onRefresh={() => handleRefreshOne(hotel)}
+                  />
+                </div>
               );
             })}
           </div>
@@ -352,16 +444,28 @@ interface ResultCardProps {
   hotel: SearchResult;
   isAdded: boolean;
   isAdding: boolean;
+  isStale?: boolean;
+  isRefreshing?: boolean;
+  isHighlighted?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
   onAdd: () => void;
+  onRefresh?: () => void;
 }
 
-function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
+function ResultCard({ hotel, isAdded, isAdding, isStale, isRefreshing, isHighlighted, isExpanded, onToggleExpand, onAdd, onRefresh }: ResultCardProps) {
   const stars = '★'.repeat(Math.min(hotel.stars, 5));
 
   return (
     <div
-      className="flex gap-[9px] p-[9px] rounded-[4px] border border-transparent bg-paper cursor-pointer transition-all group/result"
-      style={{ transition: 'border-color 0.14s, transform 0.14s, box-shadow 0.14s' }}
+      onClick={onToggleExpand}
+      className="flex gap-[9px] p-[9px] rounded-[4px] border bg-paper cursor-pointer transition-all group/result"
+      style={{
+        transition: 'border-color 0.14s, transform 0.14s, box-shadow 0.14s, background 0.2s',
+        opacity: isStale ? 0.55 : 1,
+        borderColor: isHighlighted ? '#A98B52' : 'transparent',
+        background: isHighlighted ? 'rgba(169,139,82,0.08)' : undefined,
+      }}
       onMouseEnter={e => {
         e.currentTarget.style.borderColor = 'rgba(169,139,82,0.4)';
         e.currentTarget.style.background = 'rgba(169,139,82,0.03)';
@@ -369,8 +473,8 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
         e.currentTarget.style.boxShadow = '0 3px 10px rgba(22,26,23,0.07)';
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'transparent';
-        e.currentTarget.style.background = '#F6F4EE';
+        e.currentTarget.style.borderColor = isHighlighted ? '#A98B52' : 'transparent';
+        e.currentTarget.style.background = isHighlighted ? 'rgba(169,139,82,0.08)' : '#F6F4EE';
         e.currentTarget.style.transform = '';
         e.currentTarget.style.boxShadow = '';
       }}
@@ -379,14 +483,15 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
         <img
           src={hotel.thumbnail}
           alt={hotel.name}
-          className="w-[68px] h-[54px] object-cover rounded-sm flex-shrink-0 bg-glacier"
+          className="object-cover rounded-sm flex-shrink-0 bg-glacier transition-all"
+          style={isExpanded ? { width: 120, height: 96 } : { width: 68, height: 54 }}
         />
       ) : (
-        <div className="w-[68px] h-[54px] rounded-sm flex-shrink-0 bg-glacier" />
+        <div className="rounded-sm flex-shrink-0 bg-glacier transition-all" style={isExpanded ? { width: 120, height: 96 } : { width: 68, height: 54 }} />
       )}
 
       <div className="flex-1 min-w-0">
-        <div className="font-display text-[13px] text-ink whitespace-nowrap overflow-hidden text-ellipsis mb-0.5">
+        <div className={`font-display text-[13px] text-ink mb-0.5 ${isExpanded ? '' : 'whitespace-nowrap overflow-hidden text-ellipsis'}`}>
           {hotel.name}
         </div>
         {hotel.stars > 0 && (
@@ -407,6 +512,22 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
             <span className="font-mono text-[11px] text-ink-soft ml-auto">
               ₹{Math.round(hotel.googleRateInr / 1000)}k/n
             </span>
+          )}
+          {isStale && (
+            <span className="text-[8px] font-sans font-medium px-[5px] py-px rounded-sm" style={{ background: 'rgba(217,119,6,0.1)', color: '#b45309' }}>
+              Stale
+            </span>
+          )}
+          {onRefresh && (
+            <button
+              onClick={e => { e.stopPropagation(); onRefresh(); }}
+              disabled={isRefreshing}
+              title="Refresh price"
+              className="text-ink-mute hover:text-spruce transition-colors disabled:opacity-50"
+              style={{ background: 'none', border: 'none', padding: 0, lineHeight: 0 }}
+            >
+              <RotateCw size={11} className={isRefreshing ? 'spin' : ''} />
+            </button>
           )}
         </div>
         <div className="flex gap-[3px] flex-wrap mt-1">
@@ -436,6 +557,14 @@ function ResultCard({ hotel, isAdded, isAdding, onAdd }: ResultCardProps) {
             </span>
           )}
         </div>
+        {isExpanded && hotel.description && (
+          <p className="text-[11px] text-ink-mute leading-relaxed mt-2 pr-1">
+            {hotel.description}
+          </p>
+        )}
+        {isExpanded && hotel.reviews > 0 && (
+          <p className="text-[10px] text-ink-mute mt-1">{hotel.reviews.toLocaleString('en-IN')} reviews</p>
+        )}
       </div>
 
       <div className="self-center flex-shrink-0">
