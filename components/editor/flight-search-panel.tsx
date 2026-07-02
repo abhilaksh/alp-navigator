@@ -90,8 +90,8 @@ interface FlightSearchPanelProps {
   destCheckin?: string | null;
   destCheckout?: string | null;
   defaultAdults?: number;
-  onAddOneWay: (itin: FlightItinerary, destinationId: number) => Promise<void>;
-  onAddRoundTrip: (itin: FlightItinerary, outboundDestinationId: number, inboundDestinationId: number) => Promise<void>;
+  onAddOneWay: (itin: FlightItinerary, destinationId: number, passengerCount: number) => Promise<void>;
+  onAddRoundTrip: (itin: FlightItinerary, outboundDestinationId: number, inboundDestinationId: number, passengerCount: number) => Promise<void>;
   onClose: () => void;
 }
 
@@ -169,7 +169,7 @@ export function FlightSearchPanel({
     const key = itin.ignavId ?? Math.random().toString();
     setAdding(key);
     try {
-      await onAddOneWay(itin, activeDestinationId);
+      await onAddOneWay(itin, activeDestinationId, adults + children);
     } finally {
       setAdding(null);
     }
@@ -180,7 +180,7 @@ export function FlightSearchPanel({
     const key = confirmingRoundTrip.ignavId ?? Math.random().toString();
     setAdding(key);
     try {
-      await onAddRoundTrip(confirmingRoundTrip, outboundDestId, inboundDestId);
+      await onAddRoundTrip(confirmingRoundTrip, outboundDestId, inboundDestId, adults + children);
       setConfirmingRoundTrip(null);
     } finally {
       setAdding(null);

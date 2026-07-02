@@ -40,9 +40,9 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
-  const { tripId, destinationId, leg, ignavId, cabinClass, priceAmount, currency } = body as {
+  const { tripId, destinationId, leg, ignavId, cabinClass, priceAmount, currency, passengerCount } = body as {
     tripId: number; destinationId: number; leg: LegInput;
-    ignavId?: string; cabinClass?: string; priceAmount?: number; currency?: string;
+    ignavId?: string; cabinClass?: string; priceAmount?: number; currency?: string; passengerCount?: number;
   };
 
   if (!tripId || !destinationId || !leg) {
@@ -53,6 +53,23 @@ export async function POST(req: NextRequest) {
     .filter(Boolean)
     .join(' · ') || 'Flight';
 
+  const totalInr = currency === 'INR' ? priceAmount ?? undefined : undefined;
+  const pax = passengerCount && passengerCount > 0 ? passengerCount : 1;
+  const farePerPersonInr = totalInr != null ? Math.round(totalInr / pax) : undefined;
+
+  const detailsJson = {
+    ...(leg.airline && { airline: leg.airline }),
+    ...(leg.from && { from: leg.from }),
+    ...(leg.to && { to: leg.to }),
+    ...(leg.flight_number && { flightNumber: leg.flight_number }),
+    cabinClass: cabinClass ?? 'economy',
+    ...(leg.departure_datetime && { departureDateTime: leg.departure_datetime }),
+    ...(leg.arrival_datetime && { arrivalDateTime: leg.arrival_datetime }),
+    ...(farePerPersonInr != null && { farePerPersonInr }),
+    passengers: pax,
+    isEstimated: true,
+  };
+
   const [insertedItem] = await db
     .insert(tripItems)
     .values({
@@ -61,6 +78,7 @@ export async function POST(req: NextRequest) {
       type: 'flight',
       title,
       bookingStatus: 'researching',
+      detailsJson: JSON.stringify(detailsJson),
     })
     .$returningId();
 
@@ -82,7 +100,7 @@ export async function POST(req: NextRequest) {
     departure_datetime: leg.departure_datetime ?? undefined,
     arrival_datetime: leg.arrival_datetime ?? undefined,
     duration: leg.duration ?? undefined,
-    total_inr: currency === 'INR' ? priceAmount ?? undefined : undefined,
+    total_inr: totalInr,
     ignav_id: ignavId ?? undefined,
     booking_url: bookingUrl ?? undefined,
   };

@@ -951,7 +951,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
     }
   }
 
-  async function addFlightLeg(itin: FlightItinerary, destinationId: number, leg: FlightLeg, includePrice: boolean) {
+  async function addFlightLeg(itin: FlightItinerary, destinationId: number, leg: FlightLeg, includePrice: boolean, passengerCount: number) {
     const res = await fetch('/api/flights', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -960,6 +960,7 @@ export function Editor({ trip: initialTrip }: EditorProps) {
         ignavId: itin.ignavId, cabinClass: itin.cabinClass,
         priceAmount: includePrice ? itin.priceAmount : null,
         currency: itin.currency,
+        passengerCount,
       }),
     });
     if (!res.ok) return;
@@ -970,19 +971,20 @@ export function Editor({ trip: initialTrip }: EditorProps) {
       bookingStatus: 'researching', bookingRef: null,
       confirmedTotalInr: null, startDate: null, endDate: null,
       cancellationFreeUntil: null, visaRequired: 0,
-      detailsJson: null, sortOrder: destItems.length,
+      detailsJson: data.item.detailsJson ? JSON.parse(data.item.detailsJson) : null,
+      sortOrder: destItems.length,
       itemRates: [data.itemRate],
     };
     setDests(prev => updateDest(prev, destinationId, d => ({ ...d, items: [...d.items, newItem] })));
   }
 
-  async function handleAddFlightFromSearch(itin: FlightItinerary, destinationId: number) {
-    await addFlightLeg(itin, destinationId, itin.outbound, true);
+  async function handleAddFlightFromSearch(itin: FlightItinerary, destinationId: number, passengerCount: number) {
+    await addFlightLeg(itin, destinationId, itin.outbound, true, passengerCount);
   }
 
-  async function handleAddRoundTripFromSearch(itin: FlightItinerary, outboundDestId: number, inboundDestId: number) {
-    await addFlightLeg(itin, outboundDestId, itin.outbound, true);
-    if (itin.inbound) await addFlightLeg(itin, inboundDestId, itin.inbound, false);
+  async function handleAddRoundTripFromSearch(itin: FlightItinerary, outboundDestId: number, inboundDestId: number, passengerCount: number) {
+    await addFlightLeg(itin, outboundDestId, itin.outbound, true, passengerCount);
+    if (itin.inbound) await addFlightLeg(itin, inboundDestId, itin.inbound, false, passengerCount);
   }
 
   async function handleUpdateLineItem(itemId: number, patch: Partial<LineItemState>) {
